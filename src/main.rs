@@ -59,7 +59,7 @@ fn main() {
     use type_info::Type;
     let mut env = Env::new();
     env
-        .bind_var("ZERO".to_string(), Symbol::from(0), Type::Num);
+        .bind_var("foo".to_string(), Symbol::Func(Box::new(|vec| vec[0].clone())), Type::Fn{ in_types: vec![Type::Any], out_type: Box::new(Type::Any) });
 //        .bind_var(vec!["func-name".to_string(), "arg1".to_string()], Symbol::from("arg1".to_string()));
     loop {
         let line = prompt_user("/>  ").unwrap();

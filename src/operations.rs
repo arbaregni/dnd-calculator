@@ -35,7 +35,7 @@ impl Op {
         macro_rules! check_arg {
             ($idx:expr, $typ:expr) => (
                 if !arg_types[$idx].coercible_to($typ) {
-                    return Err(fail!("operation {:?} expected arg in position {} to be type {:?}, not {:?}", self, $idx, $typ, arg_types[$idx]));
+                    return Err(fail!("operation {:?} expected arg in position {} to be type {}, not {}", self, $idx, $typ, arg_types[$idx]));
                 }
             )
         }
