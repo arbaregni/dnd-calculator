@@ -3,181 +3,125 @@ use crate::distr::{KeyType};
 use crate::operations::Op;
 use crate::env::Env;
 use crate::error::Error;
-use crate::type_info::Type;
 
 use regex::Regex;
 
-type Parse<'a, T> = Result<(T, &'a [String]), Error>;
-
+#[derive(Debug)]
+enum PToken {
+    Reserved(String),
+    Expr(Symbol),
+}
+impl PToken {
+    fn from(raw: String) -> PToken {
+        match raw.parse::<KeyType>() {
+            Ok(num) => PToken::Expr(num.into()),
+            Err(_)  => match raw.as_str() {
+                "*" | "/" | "+" | "-" | "d" | ">>" | "(" | ")" | "[" | "]" | "," | ";" => PToken::Reserved(raw),
+                _ => PToken::Expr(raw.into())
+            }
+        }
+    }
+    fn try_to_expr(&self) -> Option<Symbol> {
+        match *self {
+            PToken::Reserved(_) => None,
+            PToken::Expr(ref symbol) => Some(symbol.clone()),
+        }
+    }
+}
 /// Split a line into tokens as defined by the regex
-pub fn tokenize(src: &str) -> Vec<String> {
+fn tokenize(src: &str) -> impl Iterator<Item=String> + '_ {
     lazy_static! {
         static ref RE: Regex = Regex::new(r"[a-zA-Z\-_]+|[0-9]+|[\(\)\[\],]|[^\sA-Za-z0-9_\-]+").expect("tokenization regex did not compile");
     }
-    RE.captures_iter(src)
-        .map(|capt| capt[0].to_string())
-        .collect()
+    RE.captures_iter(src).map(|capt| capt[0].to_string())
 }
-
-/// match the first literal of the token stream to a literal
-fn match_literal<'a>(tokens: &'a [String], literal: &str) -> Parse<'a, &'a String> {
-    let (token, rest) = tokens
-        .split_first()
-        .ok_or(fail!("encountered EOF while parsing (expected literal `{}`)", literal))?;
-    if *token == literal {
-        Ok((token, rest))
-    } else {
-        Err(fail!("expected literal `{}` -- found token `{}`", literal, token))
-    }
-}
-/// return the section of tokens before the first instance of the literal
-fn scan_for_literal<'a>(tokens: &'a [String], literal: &str) -> Parse<'a, &'a [String]> {
-    let mid = tokens
-        .iter()
-        .position(|token| *token == literal)
-        .ok_or(fail!("could not find literal `{}`", literal))?;
-    let (left, rest) = tokens.split_at(mid);
-    Ok((left, &rest[1..]))
-}
-/// Parse out a number or an identifier
-fn parse_atom(tokens: &[String]) -> Parse<Symbol> {
-    let (token, _rest) = tokens.split_first()
-        .ok_or(fail!("encountered EOF while parsing"))?;
-    let symbol = match token.parse::<KeyType>() {
-        Ok(num) => Symbol::Num(num),
-        Err(_)  => Symbol::Text(token.to_string()),
-    };
-    Ok((symbol, &tokens[1..]))
-}
-
-/// extract the enclosed section of tokens in between two balanced symbols: i.e. ( )
-fn extract_from_parens<'a>(tokens: &'a [String], open: &'static str, close: &'static str) -> Parse<'a, &'a [String]> {
-    let (_, rest) = match_literal(tokens, open)?;
-    let mut lvl = 1;
-    for i in 0..rest.len() {
-        if rest[i].as_str() == open {
-            lvl += 1;
-        }
-        if rest[i].as_str() == close {
-            lvl -= 1;
-            if lvl == 0 {
-                return Ok((&rest[0..i], &rest[i+1..]));
+/// Build up the vector of pseudo tokens from the token iterator, parsing everything inside parenthesis
+fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=String>, env: &Env, in_parens: bool) -> Result<Vec<PToken>, Error> {
+    let mut ptokens = vec![];
+    loop {
+        let raw = match iter.next() {
+            None => {
+                return if !in_parens {
+                    Ok(ptokens)
+                } else {
+                    Err(fail!("unclosed parenthesis"))
+                }
+            },
+            Some(raw) => raw,
+        };
+        match raw.as_str() {
+            "(" => {
+                let inner_ptokens = build_pseudo_tokens(iter, env,true)?;
+                let expr = parse_expr(&inner_ptokens, env)?;
+                ptokens.push(PToken::Expr(expr));
+                continue;
             }
+            ")" => {
+                return if in_parens {
+                    Ok(ptokens)
+                } else {
+                    Err(fail!("unmatched close parenthesis"))
+                };
+            }
+            _ => {},
+        };
+        ptokens.push(PToken::from(raw));
+    }
+}
+
+fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
+    // can't parse nothing
+    if ptokens.is_empty() {
+        return Err(fail!("unexpected EOF while parsing"));
+    }
+    // if we get one ptoken left, and it's an expr, we're done: no recursion
+    if ptokens.len() == 1 {
+        if let Some(symbol) = ptokens[0].try_to_expr() {
+            return Ok(symbol);
         }
     }
-    Err(fail!("unmatched parenthesis"))
-}
-
-fn parse_dec<'a>(tokens: &'a [String], env: &Env) -> Parse<'a, Symbol> {
-    let (name, rest) = tokens
-        .split_first()
-        .ok_or(fail!("encountered EOF while parsing declaration (expected identifier)"))?;
-    let (_, rest) = match_literal(rest, "=")?;
-    let (expr, rest) = parse_expr(rest, env)?;
-    Ok((Symbol::Assigner{name: name.to_string(), def_type: None, expr: Box::new(expr)}, rest))
-}
-
-fn parse_fn_dec<'a>(tokens: &'a [String], env: &Env) -> Parse<'a, Symbol> {
-    let (_, rest) = match_literal(tokens, "fn")?;
-    let (name, rest) = rest
-        .split_first()
-        .ok_or(fail!("encountered EOF while parsing function declaration (expected a name)"))?;
-    println!("name: {}, rest: {:?}", name, rest);
-    let (signature_tokens, rest) = scan_for_literal(rest, "=")?; //TODO we can check if it's a block function
-    println!("{:?}", signature_tokens);
-    let mut child_env = Env::new();
-    let mut iter = signature_tokens.iter().peekable();
-    while iter.peek().is_some() {
-        let arg_name = iter.next().ok_or(fail!("expected argument name in function signature"))?;
-        let sep = iter.next().ok_or(fail!("expected type annotation in function signature"))?;
-        if sep != ":" {
-            return Err(fail!("unexpected separator after argument name in function signature `{}` (expected `:`)", sep));
-        }
-        let type_token = iter.next().ok_or(fail!("expected argument type in function signature following argument `{}`", arg_name))?;
-        let type_ = crate::type_info::Type::try_from(type_token).ok_or(fail!("unknown type in function declaration argument: {}", type_token))?;
-        child_env.bind_var(arg_name.clone(), Symbol::Nil, type_);
-    }
-    let (expr, rest) = parse_expr(rest, env)?;
-    Ok((Symbol::Assigner{name: name.to_string(), def_type: Some(Type::Nil), expr: Box::new(expr)}, rest))
-}
-
-fn parse_seq<'a>(tokens: &'a [String], env: &Env) -> Parse<'a, Symbol> {
-    let (inside, rest) = extract_from_parens(tokens, "[", "]")?;
-    // todo [d6; 4] syntax, [1..5] syntax
-    let mut symbol_vec = vec![];
-    if !inside.is_empty() {
-        for sections in inside.split(|token| token == ",") {
-            let (expr, leftover ) = parse_expr(sections, env)?;
-            if leftover.len() != 0 { return Err(fail!("unexpected tokens after expr inside sequence literal: {:?}", leftover))}
-            symbol_vec.push(expr);
-        }
-    }
-    Ok((Symbol::Seq(symbol_vec), rest))
-}
-
-fn parse_atom_or_parens<'a>(tokens: &'a [String], env: &Env) -> Parse<'a, Symbol> {
-    match tokens.get(0).map(String::as_str) {
-        None => Err(fail!("unexpected EOF while parsing")),
-        Some("(") => {
-            let (inside, rest) = extract_from_parens(tokens, "(", ")")?;
-            let (expr, leftover) = parse_expr(inside, env)?;
-            if leftover.len() != 0 { return Err(fail!("unexpected tokens after expr inside parens: {:?}", leftover))}
-            return Ok((expr, rest))
-        },
-        Some(_) => parse_atom(tokens),
-    }
-}
-
-fn parse_after<'a>(front_expr: Symbol, tokens: &'a [String], env: &Env) -> Parse<'a, Symbol> {
-    let (expr, rest) = match tokens.get(0).map(String::as_str) {
-        // there's nothing after a valid expr : that's ok, just return the valid expr
-        None => return Ok((front_expr, tokens)),
-        // parse everything after the infix operation and wrap it up with the front expr in a compound symbol
-        Some("*") => parse_atom_or_parens(&tokens[1..], env).map(|(back_expr, rest)| (Symbol::ApplyBuiltin(vec![front_expr, back_expr], Op::Mul), rest)),
-        Some("/") => parse_atom_or_parens(&tokens[1..], env).map(|(back_expr, rest)| (Symbol::ApplyBuiltin(vec![front_expr, back_expr], Op::Div), rest)),
-        Some("+") => parse_expr(&tokens[1..], env).map(|(back_expr, rest)| (Symbol::ApplyBuiltin(vec![front_expr, back_expr], Op::Add), rest)),
-        Some("-") => parse_expr(&tokens[1..], env).map(|(back_expr, rest)| (Symbol::ApplyBuiltin(vec![front_expr, back_expr], Op::Sub), rest)),
-        Some(">>") => parse_atom_or_parens(&tokens[1..], env).map(|(back_expr, rest)| (Symbol::Apply {exprs: vec![front_expr], func: back_expr.into_boxed()}, rest)),
-        Some("d") => parse_atom_or_parens(&tokens[1..], env).map(|(back_expr, rest)| (Symbol::ApplyBuiltin(vec![front_expr, back_expr], Op::MakeDice), rest)),
-        Some(op) => Err(fail!("unrecognized operation `{}`", op)),
-    }?;
-    parse_after(expr, rest, env)
-}
-
-fn parse_expr<'a>(tokens: &'a [String], env: &Env) -> Parse<'a, Symbol> {
-    println!("---parsing : {:?}", tokens);
-    let word = match tokens.get(0) {
-        Some(s) => s.clone(),
-        None => return Err(fail!("unexpected EOF while parsing")),
-    };
-    // attempt to match the first expr
-    let (front_expr, rest) = match word.as_str() {
-        "d" => {
-            let (expr, rest) = parse_atom_or_parens(&tokens[1..], env)?;
-            (Symbol::ApplyBuiltin(vec![expr], Op::MakeDiceSingle), rest)
-        },
-        "[" => parse_seq(tokens, env)?,
-        _   => parse_atom_or_parens(tokens, env)?,
-    };
-    // check the next token for infix operations
-    parse_after(front_expr, rest, env)
-}
-
-pub fn parse_line(tokens: &[String], env: &Env) -> Result<Symbol, Error> {
-    let (symbol, remaining) =
-        // if we contain an equals token, then we're an assignment and not an expression
-        if tokens.iter().find(|token| *token == "=").is_some() {
-            if tokens[0] == "fn" {
-                parse_fn_dec(tokens, env)
+    // scan the pseudo tokens for the lowest precedence operator, its index, and its precedence value
+    // store the lowest precedence (keyworded text, index, precedence)
+    let mut lowest: Option<(&str, usize, u32)> = None; // todo creating a sorted list of operators be more efficient?
+    for i in 0..ptokens.len() {
+        if let PToken::Reserved(ref curr_kwrd) = &ptokens[i] {
+            let curr_prec = match curr_kwrd.as_str() {
+                "d" => 100,
+                "*" | "/" => 55,
+                "+" | "-" => 54,
+                ">>" => 0,
+                _ => panic!("unexpected keyword: {} (could not assign precedence)", curr_kwrd)
+            };
+            if let Some((_, _, prec)) = lowest {
+                // the current precedence must be strictly greater in order to default to the left most operator
+                if curr_prec <= prec {
+                    lowest = Some((curr_kwrd, i, curr_prec));
+                }
             } else {
-                parse_dec(tokens, env)
+                lowest = Some((curr_kwrd, i, curr_prec));
             }
-        } else {
-            // otherwise, it's just a normal expr
-            parse_expr(tokens, env)
-        }?;
-    if remaining.len() != 0 {
-        return Err(fail!("unexpected tokens: {:?}, after symbol: {:?}", remaining, symbol));
+        }
     }
-    Ok(symbol)
+    // todo handle this error
+    let (kwrd, idx, _) = lowest.expect("can't handle not finding an operator");
+    let parse_left = || parse_expr(&ptokens[..idx], env).map_err(|err| enrich!(err, "Could not parse left hand operand of operator `{}`", kwrd));
+    let parse_right = || parse_expr(&ptokens[idx+1..], env).map_err(|err| enrich!(err, "Could not parse right hand operand of operator `{}`", kwrd));
+    Ok(
+        match kwrd {
+            "d" if idx == 0 => Symbol::ApplyBuiltin(vec![parse_right()?], Op::MakeDiceSingle),
+            "d" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::MakeDice),
+            "*" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Mul),
+            "/" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Div),
+            "+" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Add),
+            "-" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Sub),
+            ">>" => Symbol::Apply{exprs: vec![parse_left()?], func: parse_right()?.into_boxed()}, // todo multiple input: is this part of the same deal as partial application?
+            op => return Err(fail!("no operator found with name: {}", op)),
+        }
+    )
+}
+
+pub fn parse_line(src: &str, env: &Env) -> Result<Symbol, Error> {
+    let mut iter = tokenize(src);
+    let ptokens = build_pseudo_tokens(&mut iter, env, false)?;
+    parse_expr(&ptokens, env)
 }

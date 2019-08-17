@@ -33,18 +33,8 @@ fn prompt_user(prompt: &str) -> io::Result<String> {
 
 /// read, evaluate, and then print the users line
 pub fn read_eval_print(line: &str, env: &mut Env) -> Result<Symbol, Error> {
-    let tokens = parse::tokenize(&line);
-   /* if tokens.len() == 0 {
-        if prompt_user("Quit session? [y/n]: ").unwrap().to_lowercase().trim_end() == "y" {
-            return Ok(())
-        } else {
-            println!();
-            continue
-        }
-    } */
-    println!("tokens: {:?}", tokens);
     println!("environment: {:?}", env);
-    let ast: Symbol = parse::parse_line(&tokens, &env)?;
+    let ast: Symbol = parse::parse_line(line, env)?;
     let type_ = ast.type_check(&env)?;
     ast.walk(0);
     println!("{}", ast.repr());
@@ -63,8 +53,8 @@ fn main() {
 //        .bind_var(vec!["func-name".to_string(), "arg1".to_string()], Symbol::from("arg1".to_string()));
     loop {
         let line = prompt_user("/>  ").unwrap();
-        if let Err(err_msg) = read_eval_print(&line, &mut env) {
-            err_msg.pretty_print();
+        if let Err(err) = read_eval_print(&line, &mut env) {
+            println!("{}", err);
         };
     }
 }
