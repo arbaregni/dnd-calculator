@@ -28,7 +28,7 @@ fn prompt_user(prompt: &str) -> io::Result<String> {
     stdout.flush()?;
     let mut buf = String::new();
     stdin.read_line(&mut buf)?;
-    Ok(buf)
+    Ok(buf.trim().to_string())
 }
 
 /// read, evaluate, and then print the users line
@@ -54,6 +54,9 @@ fn main() {
     loop {
         let line = prompt_user("/>  ").unwrap();
         if let Err(err) = read_eval_print(&line, &mut env) {
+            if let Some(span) = err.opt_span {
+                println!("{}", Error::underline(&line, span));
+            }
             println!("{}", err);
         };
     }

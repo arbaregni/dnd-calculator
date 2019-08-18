@@ -118,6 +118,8 @@ impl Symbol {
             Symbol::Apply {ref func, ref exprs} => {
                 // check the type of each input
                 let type_args = exprs.iter().map(|arg| arg.type_check(env)).collect::<Result<Vec<Type>, Error>>()?;
+                let fn_type = func.type_check(env)?;
+                if fn_type.is_any() { return Ok(Type::Any); }
                 if let Type::Fn {ref in_types, ref out_type} = func.type_check(env)? {
                     // each type in our argument much be coercible to the corresponding in_type in the signature
                     if in_types.iter().zip(type_args.iter()).all(|(expected, found)| found.coercible_to(expected)) {
@@ -163,10 +165,11 @@ impl Symbol {
             Symbol::Apply {ref func, ref exprs} => Cow::Owned({
                 // evaluate each argument
                 let eval_args: Vec<Symbol> = exprs.iter().map(|expr| expr.eval(env).into_owned()).collect();
-                if let Symbol::Func(ref fnptr) = *func.eval(env) {
+                let eval_func = func.eval(env);
+                if let Symbol::Func(ref fnptr) = *eval_func {
                     fnptr(eval_args)
                 } else {
-                    panic!("symbol should have been checked to be a function")
+                    panic!("not a function: `{}`", eval_func.repr())
                 }
             }),
             Symbol::ApplyBuiltin(args, op) => Cow::Owned({

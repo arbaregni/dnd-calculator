@@ -7,65 +7,114 @@ use crate::error::Error;
 use regex::Regex;
 
 #[derive(Debug)]
-enum PToken {
+struct PToken {
+    kind: PTokenKind,
+    span: (usize, usize),
+}
+#[derive(Debug)]
+enum PTokenKind {
     Reserved(String),
     Expr(Symbol),
 }
 impl PToken {
-    fn from(raw: String) -> PToken {
-        match raw.parse::<KeyType>() {
-            Ok(num) => PToken::Expr(num.into()),
-            Err(_)  => match raw.as_str() {
-                "*" | "/" | "+" | "-" | "d" | ">>" | "(" | ")" | "[" | "]" | "," | ";" => PToken::Reserved(raw),
-                _ => PToken::Expr(raw.into())
-            }
+    /// create a pseudo token from a String and the span of the source where it was taken from
+    /// if possible, it parses `raw` into Symbol::Num
+    /// if possible, it creates a reserved PTokenKind
+    /// other wise, it creates a Symbol::Text
+    fn from(raw: String, span: (usize, usize)) -> PToken {
+        PToken {
+            kind: match raw.parse::<KeyType>() {
+                Ok(num) => PTokenKind::Expr(num.into()),
+                Err(_)  => match raw.as_str() { // todo only catch errors due to incorrect digits
+                    "*" | "/" | "+" | "-" | "d" | ">>" | "(" | ")" | "[" | "]" | "," | ";" => PTokenKind::Reserved(raw),
+                    _ => PTokenKind::Expr(raw.into())
+                }
+            },
+            span
+        }
+    }
+    /// creates a PToken from the first and last pseudo tokens that were parsed into the resulting symbol
+    fn from_compound(symbol: Symbol, inner_ptokens: &[PToken]) -> PToken {
+        PToken {
+            kind: PTokenKind::Expr(symbol),
+            span: (inner_ptokens.get(0).expect("can't handle zero sized inner_ptokens yet").span.0, inner_ptokens.last().expect("zero sized inner_ptokens not handled yet").span.1) // expand to include the entire expression that produced the symbol
+        }
+    }
+    fn try_to_reseved(&self) -> Option<&str> {
+        match self.kind {
+            PTokenKind::Reserved(ref k) => Some(k),
+            PTokenKind::Expr(_) => None,
         }
     }
     fn try_to_expr(&self) -> Option<Symbol> {
-        match *self {
-            PToken::Reserved(_) => None,
-            PToken::Expr(ref symbol) => Some(symbol.clone()),
+        match self.kind {
+            PTokenKind::Reserved(_) => None,
+            PTokenKind::Expr(ref symbol) => Some(symbol.clone()),
         }
     }
 }
+pub fn parse_line(src: &str, env: &Env) -> Result<Symbol, Error> {
+    let mut iter = tokenize(src);
+    let ptokens = build_pseudo_tokens(&mut iter, env, None, None)?;
+    parse_expr(&ptokens, env)
+}
 /// Split a line into tokens as defined by the regex
-fn tokenize(src: &str) -> impl Iterator<Item=String> + '_ {
+fn tokenize(src: &str) -> impl Iterator<Item=regex::Match> + '_ {
     lazy_static! {
-        static ref RE: Regex = Regex::new(r"[a-zA-Z\-_]+|[0-9]+|[\(\)\[\],]|[^\sA-Za-z0-9_\-]+").expect("tokenization regex did not compile");
+        static ref TOKEN_REGEX: Regex = Regex::new(r"([a-zA-Z\-_]+|[0-9]+|[\(\)\[\],]|[^\sA-Za-z0-9_\-]+)").expect("tokenization regex did not compile");
     }
-    RE.captures_iter(src).map(|capt| capt[0].to_string())
+    TOKEN_REGEX.find_iter(src)
 }
 /// Build up the vector of pseudo tokens from the token iterator, parsing everything inside parenthesis
-fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=String>, env: &Env, in_parens: bool) -> Result<Vec<PToken>, Error> {
+fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=regex::Match<'a>>, env: &Env, start_paren: Option<usize>, start_brack: Option<usize>) -> Result<Vec<PToken>, Error> {
     let mut ptokens = vec![];
     loop {
-        let raw = match iter.next() {
+        let mat= match iter.next() {
             None => {
-                return if !in_parens {
-                    Ok(ptokens)
+                return if let Some(i) = start_paren {
+                    Err(fail_at!((i,i+1), "unclosed parenthesis"))
+                } else if let Some(i) = start_brack {
+                    Err(fail_at!((i,i+1), "unclosed square brackets"))
                 } else {
-                    Err(fail!("unclosed parenthesis"))
+                    Ok(ptokens)
                 }
             },
-            Some(raw) => raw,
+            Some(mat) => mat,
         };
-        match raw.as_str() {
+        let value = match mat.as_str() {
             "(" => {
-                let inner_ptokens = build_pseudo_tokens(iter, env,true)?;
-                let expr = parse_expr(&inner_ptokens, env)?;
-                ptokens.push(PToken::Expr(expr));
-                continue;
+                // recursive call needs to remember where the start paren started.
+                // forget that you're inside a square bracket for this scenario:
+                // [   (   ]    )
+                let inner_ptokens = build_pseudo_tokens(iter, env, Some(mat.start()), None)?;
+                let symbol = parse_expr(&inner_ptokens, env)?;
+                PToken::from_compound(symbol, &inner_ptokens)
             }
             ")" => {
-                return if in_parens {
+                return if start_paren.is_some() {
                     Ok(ptokens)
                 } else {
-                    Err(fail!("unmatched close parenthesis"))
+                    Err(fail_at!((mat.start(), mat.end()), "unmatched close parenthesis"))
                 };
             }
-            _ => {},
+            "[" => {
+                // recursive call needs to remember where the brackets started.
+                // forget that you're inside a paren for this scenario:
+                // [   (   ]    )
+                let inner_ptokens = build_pseudo_tokens(iter, env, None, Some(mat.start()))?;
+                let symbol = parse_seq(&inner_ptokens, env)?;
+                PToken::from_compound(symbol, &inner_ptokens)
+            }
+            "]" => {
+                return if start_brack.is_some() {
+                    Ok(ptokens)
+                } else {
+                    Err(fail_at!((mat.start(), mat.end()), "unmatched close_parenthesis"))
+                }
+            }
+            _ => PToken::from(mat.as_str().to_string(), (mat.start(), mat.end())),
         };
-        ptokens.push(PToken::from(raw));
+        ptokens.push(value);
     }
 }
 
@@ -84,7 +133,7 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     // store the lowest precedence (keyworded text, index, precedence)
     let mut lowest: Option<(&str, usize, u32)> = None; // todo creating a sorted list of operators be more efficient?
     for i in 0..ptokens.len() {
-        if let PToken::Reserved(ref curr_kwrd) = &ptokens[i] {
+        if let PTokenKind::Reserved(ref curr_kwrd) = &ptokens[i].kind {
             let curr_prec = match curr_kwrd.as_str() {
                 "d" => 100,
                 "*" | "/" => 55,
@@ -104,8 +153,8 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     }
     // todo handle this error
     let (kwrd, idx, _) = lowest.expect("can't handle not finding an operator");
-    let parse_left = || parse_expr(&ptokens[..idx], env).map_err(|err| enrich!(err, "Could not parse left hand operand of operator `{}`", kwrd));
-    let parse_right = || parse_expr(&ptokens[idx+1..], env).map_err(|err| enrich!(err, "Could not parse right hand operand of operator `{}`", kwrd));
+    let parse_left = || parse_expr(&ptokens[..idx], env).map_err(|err| fail_at!(ptokens[idx].span, "Could not parse left hand operand of operator `{}`", kwrd).concat(err));
+    let parse_right = || parse_expr(&ptokens[idx+1..], env).map_err(|err| fail_at!(ptokens[idx].span, "Could not parse right hand operand of operator `{}`", kwrd).concat(err));
     Ok(
         match kwrd {
             "d" if idx == 0 => Symbol::ApplyBuiltin(vec![parse_right()?], Op::MakeDiceSingle),
@@ -115,13 +164,18 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
             "+" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Add),
             "-" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Sub),
             ">>" => Symbol::Apply{exprs: vec![parse_left()?], func: parse_right()?.into_boxed()}, // todo multiple input: is this part of the same deal as partial application?
-            op => return Err(fail!("no operator found with name: {}", op)),
+            op => return Err(fail_at!(ptokens[idx].span, "no operator found with name: {}", op)),
         }
     )
 }
 
-pub fn parse_line(src: &str, env: &Env) -> Result<Symbol, Error> {
-    let mut iter = tokenize(src);
-    let ptokens = build_pseudo_tokens(&mut iter, env, false)?;
-    parse_expr(&ptokens, env)
+/// parse a sequence literal
+fn parse_seq(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
+    // todo: parse other seq literals: [d6; 4] and [0..6]
+    // parse comma separated seq: [3, 4, 5]
+    let vec = ptokens
+        .split(|ptoken| ptoken.try_to_reseved().map_or(false, |k| k == ","))
+        .map(|segment| parse_expr(segment, env))
+        .collect::<Result<Vec<Symbol>, Error>>()?;
+    Ok(Symbol::Seq(vec))
 }

@@ -39,6 +39,7 @@ impl Type {
         }
         s
     }
+    pub fn is_any(&self) -> bool { *self == Type::Any }
     pub fn coercible_to(&self, type_: &Type) -> bool {
         // Type::Any can be coerced into anything and anything can be coerced into Type::Any
         if *self == Type::Any || *type_ == Type::Any {
