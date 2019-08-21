@@ -60,15 +60,16 @@ impl Op {
     }
     pub fn eval(&self, args: Vec<Cow<Symbol>>) -> Result<Symbol, Error> {
         Ok(match *self {
-            Op::Mul => args[0].expect_distr().combine_op(&args[1].expect_distr(), |x,y| x * y).into(),
-            Op::Div => args[0].expect_distr().combine_fallible_op(&args[1].expect_distr(), |x,y| x.checked_div(y).ok_or(fail!("zero division error")))?.into(),
-            Op::Add => args[0].expect_distr().combine_op(&args[1].expect_distr(), |x,y| x + y).into(),
-            Op::Sub => args[0].expect_distr().combine_op(&args[1].expect_distr(), |x,y| x - y).into(),
-            Op::StatView  => println!("{}", args[0].expect_distr().stat_view()).into(),
-            Op::HistView  => println!("{}", args[0].expect_distr().hist_view()).into(),
-            Op::TableView => println!("{}", args[0].expect_distr().table_view()).into(),
-            Op::MakeDice => crate::distr::Distr::stacked_unifs(args[0].expect_num().into_owned(), args[1].expect_num().into_owned()).into(),
-            Op::MakeDiceSingle => crate::distr::Distr::unif(args[0].expect_num().into_owned()).into(),
+            Op::Mul => args[0].try_to_distr()?.combine_op(args[1].try_to_distr()?.as_ref(), |x, y| x * y).into(),
+            Op::Div => args[0].try_to_distr()?.combine_fallible_op(args[1].try_to_distr()?.as_ref(),
+                                                                   |x, y| x.checked_div(y).ok_or(fail!("zero division error")))?.into(),
+            Op::Add => args[0].try_to_distr()?.combine_op(args[1].try_to_distr()?.as_ref(), |x, y| x + y).into(),
+            Op::Sub => args[0].try_to_distr()?.combine_op(args[1].try_to_distr()?.as_ref(), |x, y| x - y).into(),
+            Op::StatView  => println!("{}", args[0].try_to_distr()?.stat_view()).into(),
+            Op::HistView  => println!("{}", args[0].try_to_distr()?.hist_view()).into(),
+            Op::TableView => println!("{}", args[0].try_to_distr()?.table_view()).into(),
+            Op::MakeDice => crate::distr::Distr::stacked_unifs(args[0].try_to_num()?.into_owned(), args[1].try_to_num()?.into_owned()).into(),
+            Op::MakeDiceSingle => crate::distr::Distr::unif(args[0].try_to_num()?.into_owned()).into(),
         })
     }
 }

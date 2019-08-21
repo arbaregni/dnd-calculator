@@ -23,24 +23,24 @@ impl Symbol {
     pub fn into_boxed(self) -> Box<Symbol> {
         Box::new(self)
     }
-    pub fn expect_distr(&self) -> Cow<Distr> {
+    pub fn try_to_distr(&self) -> Result<Cow<Distr>, Error> {
         match *self {
-            Symbol::Distr(ref d) => Cow::Borrowed(d),
-            Symbol::Num(num) => Cow::Owned(num.into()),
-            _ => panic!("{:?} is not a distr", self)
+            Symbol::Distr(ref d) => Ok(Cow::Borrowed(d)),
+            Symbol::Num(num) => Ok(Cow::Owned(num.into())),
+            _ => Err(fail!("{} is not a distr", self.repr())),
         }
     }
-    pub fn expect_num(&self) -> Cow<KeyType> {
+    pub fn try_to_num(&self) -> Result<Cow<KeyType>, Error> {
         match *self {
-            Symbol::Num(num) => Cow::Owned(num),
-            Symbol::Distr(ref d) => Cow::Owned(d.try_cast().expect("the particular distribution can not be implicitly cast to a number")),
-            _ => panic!("{:?} is not a number", self)
+            Symbol::Num(num) => Ok(Cow::Owned(num)),
+            Symbol::Distr(ref d) => Ok(Cow::Owned(d.try_cast()?)),
+            _ => Err(fail!("{} is not a number", self.repr())),
         }
     }
-    pub fn expect_string(&self) -> Cow<String> {
+    pub fn try_to_str(&self) -> Result<&str, Error> {
         match *self {
-            Symbol::Text(ref s) => Cow::Borrowed(s),
-            _ => panic!("{:?} is not a string", self)
+            Symbol::Text(ref s) => Ok(s),
+            _ => Err(fail!("{} is not a string", self.repr()))
         }
     }
     pub fn expect_func(&self) -> &Box<fn(Vec<Symbol>) -> Symbol> {
@@ -173,7 +173,7 @@ impl Symbol {
                 }
             }),
             Symbol::ApplyBuiltin(args, op) => Cow::Owned({
-                let eval_args: Vec<Cow<Symbol>> = args.iter().map(|arg| arg.eval(env)).collect::<Result<Vec<Cow<Symbol>>, Error>>()?;
+                let eval_args = args.iter().map(|arg| arg.eval(env)).collect::<Result<Vec<Cow<Symbol>>, Error>>()?;
                 op.eval(eval_args)?
             }),
             Symbol::Text(ref name) => {
