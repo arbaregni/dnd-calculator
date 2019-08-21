@@ -29,10 +29,10 @@ impl PToken {
         }
     }
     /// creates a PToken from the first and last pseudo tokens that were parsed into the resulting symbol
-    pub fn from_compound(symbol: Symbol, inner_ptokens: &[PToken]) -> PToken {
+    pub fn from_symbol(symbol: Symbol, span: (usize, usize)) -> PToken {
         PToken {
             kind: PTokenKind::Expr(symbol),
-            span: (inner_ptokens.get_opt_span().expect("can't get span for zero inner_ptokens yet"))
+            span,
         }
     }
     pub fn try_to_reserved(&self) -> Option<&str> {

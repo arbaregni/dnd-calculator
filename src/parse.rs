@@ -44,8 +44,14 @@ fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=regex::Match<'a>>, env:
                 // forget that you're inside a square bracket for this scenario:
                 // [   (   ]    )
                 let inner_ptokens = build_pseudo_tokens(iter, env, Some(mat.start()), None)?;
-                let symbol = parse_expr(&inner_ptokens, env)?;
-                PToken::from_compound(symbol, &inner_ptokens)
+                let symbol = if inner_ptokens.len() != 0 {
+                    parse_expr(&inner_ptokens, env)?
+                } else {
+                    Symbol::Nil
+                };
+                // todo can we get the span from the first paren to the last paren?
+                let span = inner_ptokens.as_slice().get_opt_span().unwrap_or((mat.start(), mat.end()));
+                PToken::from_symbol(symbol, span)
             }
             ")" => {
                 return if start_paren.is_some() {
@@ -60,7 +66,9 @@ fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=regex::Match<'a>>, env:
                 // [   (   ]    )
                 let inner_ptokens = build_pseudo_tokens(iter, env, None, Some(mat.start()))?;
                 let symbol = parse_seq(&inner_ptokens, env)?;
-                PToken::from_compound(symbol, &inner_ptokens)
+                // todo can we get the span from the first paren to the last paren?
+                let span = inner_ptokens.as_slice().get_opt_span().unwrap_or((mat.start(), mat.end()));
+                PToken::from_symbol(symbol, span)
             }
             "]" => {
                 return if start_brack.is_some() {
