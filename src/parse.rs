@@ -1,5 +1,5 @@
+use crate::ptokens::{PToken, PTokenKind, MaybeHasSpan};
 use crate::symbols::Symbol;
-use crate::distr::{KeyType};
 use crate::operations::Op;
 use crate::env::Env;
 use crate::error::Error;
@@ -7,56 +7,12 @@ use crate::error::ConcatErr;
 
 use regex::Regex;
 
-#[derive(Debug)]
-struct PToken {
-    kind: PTokenKind,
-    span: (usize, usize),
-}
-#[derive(Debug)]
-enum PTokenKind {
-    Reserved(String),
-    Expr(Symbol),
-}
-impl PToken {
-    /// create a pseudo token from a String and the span of the source where it was taken from
-    /// if possible, it parses `raw` into Symbol::Num
-    /// if possible, it creates a reserved PTokenKind
-    /// other wise, it creates a Symbol::Text
-    fn from(raw: String, span: (usize, usize)) -> PToken {
-        PToken {
-            kind: match raw.parse::<KeyType>() {
-                Ok(num) => PTokenKind::Expr(num.into()),
-                Err(_)  => match raw.as_str() { // todo only catch errors due to incorrect digits
-                    "*" | "/" | "+" | "-" | "d" | ">>" | "(" | ")" | "[" | "]" | "," | ";" => PTokenKind::Reserved(raw),
-                    _ => PTokenKind::Expr(raw.into())
-                }
-            },
-            span
-        }
-    }
-    /// creates a PToken from the first and last pseudo tokens that were parsed into the resulting symbol
-    fn from_compound(symbol: Symbol, inner_ptokens: &[PToken]) -> PToken {
-        PToken {
-            kind: PTokenKind::Expr(symbol),
-            span: (inner_ptokens.get(0).expect("can't handle zero sized inner_ptokens yet").span.0, inner_ptokens.last().expect("zero sized inner_ptokens not handled yet").span.1) // expand to include the entire expression that produced the symbol
-        }
-    }
-    fn try_to_reserved(&self) -> Option<&str> {
-        match self.kind {
-            PTokenKind::Reserved(ref k) => Some(k),
-            PTokenKind::Expr(_) => None,
-        }
-    }
-    fn try_to_expr(&self) -> Option<Symbol> {
-        match self.kind {
-            PTokenKind::Reserved(_) => None,
-            PTokenKind::Expr(ref symbol) => Some(symbol.clone()),
-        }
-    }
-}
 pub fn parse_line(src: &str, env: &Env) -> Result<Symbol, Error> {
     let mut iter = tokenize(src);
     let ptokens = build_pseudo_tokens(&mut iter, env, None, None)?;
+    if let Some(result) = parse_assignment(&ptokens, env) {
+        return result;
+    }
     parse_expr(&ptokens, env)
 }
 /// Split a line into tokens as defined by the regex
@@ -119,10 +75,39 @@ fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=regex::Match<'a>>, env:
     }
 }
 
+/// Parse an assignment statement
+/// Return Some(result) if it's definitely an assignment statement
+/// Return None if not
+fn parse_assignment(ptokens: &[PToken], env: &Env) -> Option<Result<Symbol, Error>> {
+    let segments = ptokens
+        .split(|ptoken| ptoken.try_to_reserved().map_or(false, |k| k == "="))
+        .collect::<Vec<&[PToken]>>();
+    println!("parsing assignment: {:?}", &segments);
+    match segments.len() {
+        2 => {
+            let pat = match parse_pat(segments[0]).concat_err(fail!("invalid left hand side of assignment statement")) {
+                Ok(pat) => pat,
+                Err(e) => return Some(Err(e)),
+            };
+            let expr = match parse_expr(segments[1], env) {
+                Ok(expr) => expr,
+                Err(e) => return Some(Err(e)),
+            };
+            Some(Ok(Symbol::Assigner {
+                name: pat,
+                def_type: None,
+                expr: expr.into_boxed(),
+            }))
+        },
+        0 | 1 => None, // we pass: something else will take care of this
+        _ => Some(Err(fail_at!(ptokens.get_opt_span().unwrap(), "can't nest assignments: `=` is not an operator"))),
+    }
+}
+
 fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     // can't parse nothing
     if ptokens.is_empty() {
-        return Err(fail!("unexpected EOF while parsing"));
+        return Err(fail!("unexpected EOF while parsing expr"));
     }
     // if we get one ptoken left, and it's an expr, we're done: no recursion
     if ptokens.len() == 1 {
@@ -154,7 +139,7 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     }
     let (kwrd, idx, _) = match lowest {
         Some(info) => info,
-        None => return Err(fail_at!((ptokens.get(0).unwrap().span.0, ptokens.last().unwrap().span.1), "no operator found here"))
+        None => return Err(fail_at!(ptokens.get_opt_span().expect("ptokens of len 1 and len 0 should be checked already"), "no operator found here"))
     };
     let parse_left = || parse_expr(&ptokens[..idx], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse left hand operand of operator `{}`", kwrd));
     let parse_right = || parse_expr(&ptokens[idx+1..], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse right hand operand of operator `{}`", kwrd));
@@ -172,7 +157,7 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     )
 }
 
-/// parse a sequence literal
+/// parse a sequence literal: [1, 2, 3] or [1; 4] and the like
 fn parse_seq(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     if ptokens.len() == 0 {
         return Ok(Symbol::Seq(vec![]));
@@ -185,7 +170,7 @@ fn parse_seq(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     match segments.len() {
         2 => return parse_expr(segments[0], env).concat_err(fail!("could not parse sequence")),
         0 | 1 => { } // pass: comma separated list will take care of this
-        _ => return Err(fail_at!((ptokens[0].span.0, ptokens[ptokens.len()-1].span.1), "unexpected sequence syntax: too many semicolons")),
+        _ => return Err(fail_at!(ptokens.get_opt_span().unwrap(), "unexpected sequence syntax: too many semicolons")),
     }
 
     // parse comma separated seq: [3, 4, 5]
@@ -194,4 +179,18 @@ fn parse_seq(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
         .map(|segment| parse_expr(segment, env).concat_err(fail!("could not parse as comma separated sequence")))
         .collect::<Result<Vec<Symbol>, Error>>()?;
     Ok(Symbol::Seq(vec))
+}
+
+fn parse_pat(ptokens: &[PToken]) -> Result<String, Error> {
+    match ptokens.len() {
+        1 => {
+            if let PTokenKind::Expr(Symbol::Text(ref string)) = &ptokens[0].kind {
+                Ok(string.to_string())
+            } else {
+                Err(fail_at!(ptokens[0].span, "not valid pattern"))
+            }
+        }
+        0 => Err(fail!("unexpected EOF while parsing pattern")),
+        _ => Err(fail_at!(ptokens.get_opt_span().unwrap(), "not valid pattern (too many tokens)"))
+    }
 }
