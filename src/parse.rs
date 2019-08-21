@@ -3,6 +3,7 @@ use crate::distr::{KeyType};
 use crate::operations::Op;
 use crate::env::Env;
 use crate::error::Error;
+use crate::error::ConcatErr;
 
 use regex::Regex;
 
@@ -40,7 +41,7 @@ impl PToken {
             span: (inner_ptokens.get(0).expect("can't handle zero sized inner_ptokens yet").span.0, inner_ptokens.last().expect("zero sized inner_ptokens not handled yet").span.1) // expand to include the entire expression that produced the symbol
         }
     }
-    fn try_to_reseved(&self) -> Option<&str> {
+    fn try_to_reserved(&self) -> Option<&str> {
         match self.kind {
             PTokenKind::Reserved(ref k) => Some(k),
             PTokenKind::Expr(_) => None,
@@ -151,10 +152,12 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
             }
         }
     }
-    // todo handle this error
-    let (kwrd, idx, _) = lowest.expect("can't handle not finding an operator");
-    let parse_left = || parse_expr(&ptokens[..idx], env).map_err(|err| fail_at!(ptokens[idx].span, "Could not parse left hand operand of operator `{}`", kwrd).concat(err));
-    let parse_right = || parse_expr(&ptokens[idx+1..], env).map_err(|err| fail_at!(ptokens[idx].span, "Could not parse right hand operand of operator `{}`", kwrd).concat(err));
+    let (kwrd, idx, _) = match lowest {
+        Some(info) => info,
+        None => return Err(fail_at!((ptokens.get(0).unwrap().span.0, ptokens.last().unwrap().span.1), "no operator found here"))
+    };
+    let parse_left = || parse_expr(&ptokens[..idx], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse left hand operand of operator `{}`", kwrd));
+    let parse_right = || parse_expr(&ptokens[idx+1..], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse right hand operand of operator `{}`", kwrd));
     Ok(
         match kwrd {
             "d" if idx == 0 => Symbol::ApplyBuiltin(vec![parse_right()?], Op::MakeDiceSingle),
@@ -171,11 +174,24 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
 
 /// parse a sequence literal
 fn parse_seq(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
+    if ptokens.len() == 0 {
+        return Ok(Symbol::Seq(vec![]));
+    }
     // todo: parse other seq literals: [d6; 4] and [0..6]
+    // parse semi colon syntax: [d6; 4]
+    let segments = ptokens
+        .split(|ptoken| ptoken.try_to_reserved().map_or(false, |k| k == ";"))
+        .collect::<Vec<&[PToken]>>();
+    match segments.len() {
+        2 => return parse_expr(segments[0], env).concat_err(fail!("could not parse sequence")),
+        0 | 1 => { } // pass: comma separated list will take care of this
+        _ => return Err(fail_at!((ptokens[0].span.0, ptokens[ptokens.len()-1].span.1), "unexpected sequence syntax: too many semicolons")),
+    }
+
     // parse comma separated seq: [3, 4, 5]
     let vec = ptokens
-        .split(|ptoken| ptoken.try_to_reseved().map_or(false, |k| k == ","))
-        .map(|segment| parse_expr(segment, env))
+        .split(|ptoken| ptoken.try_to_reserved().map_or(false, |k| k == ","))
+        .map(|segment| parse_expr(segment, env).concat_err(fail!("could not parse as comma separated sequence")))
         .collect::<Result<Vec<Symbol>, Error>>()?;
     Ok(Symbol::Seq(vec))
 }

@@ -59,3 +59,15 @@ impl std::fmt::Display for Error {
         write!(f, "  {}[line:{} col:{} file:{}] {}", self.tag, self.line, self.column, self.file, self.reason)
     }
 }
+
+/// A trait to enable us to concate additional error messages to any Result that we return
+pub trait ConcatErr {
+    type OkType;
+    fn concat_err(self, err: Error) -> Result<Self::OkType, Error>;
+}
+impl<T> ConcatErr for Result<T, Error> {
+    type OkType = T;
+    fn concat_err(self, err: Error) -> Result<Self::OkType, Error> {
+        self.map_err(|prev_err| prev_err.concat(err))
+    }
+}
