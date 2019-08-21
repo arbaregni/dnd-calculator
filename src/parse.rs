@@ -82,14 +82,13 @@ fn parse_assignment(ptokens: &[PToken], env: &Env) -> Option<Result<Symbol, Erro
     let segments = ptokens
         .split(|ptoken| ptoken.try_to_reserved().map_or(false, |k| k == "="))
         .collect::<Vec<&[PToken]>>();
-    println!("parsing assignment: {:?}", &segments);
     match segments.len() {
         2 => {
             let pat = match parse_pat(segments[0]).concat_err(fail!("invalid left hand side of assignment statement")) {
                 Ok(pat) => pat,
                 Err(e) => return Some(Err(e)),
             };
-            let expr = match parse_expr(segments[1], env) {
+            let expr = match parse_expr(segments[1], env).concat_err(fail!("invalid right hand side of assignment statement")) {
                 Ok(expr) => expr,
                 Err(e) => return Some(Err(e)),
             };
