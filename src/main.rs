@@ -20,6 +20,7 @@ use std::io::Write;
 use symbols::Symbol;
 use crate::error::Error;
 use crate::env::Env;
+use crate::type_info::FnType;
 
 fn prompt_user(prompt: &str) -> io::Result<String> {
     let stdin = io::stdin();
@@ -50,8 +51,10 @@ fn main() {
     use type_info::Type;
     let mut env = Env::new();
     env
-        .bind_var("foo".to_string(), Symbol::Fn(Box::new(|vec| vec[0].clone()), Type::Fn {in_types: vec![Type::Distr], out_type: Box::new(Type::Distr)}), Type::Fn{ in_types: vec![Type::Distr], out_type: Box::new(Type::Distr) });
-//        .bind_var(vec!["func-name".to_string(), "arg1".to_string()], Symbol::from("arg1".to_string()));
+        .bind_fn_var("I".to_string(), Symbol::Fn(Box::new(|vec| vec[0].clone()),
+                                                 FnType{ in_types: vec![Type::Distr], out_type: Box::new(Type::Distr) }))
+        .bind_fn_var("K".to_string(), Symbol::Fn(Box::new(|vec| vec[1].clone()),
+                                                 FnType{ in_types: vec![Type::Distr, Type::Distr], out_type: Box::new(Type::Distr) }));
     loop {
         let line = prompt_user("/>  ").unwrap();
         if let Err(err) = read_eval_print(&line, &mut env) {

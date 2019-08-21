@@ -1,11 +1,26 @@
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FnType {
+    pub in_types: Vec<Type>,
+    pub out_type: Box<Type>,
+}
+impl std::fmt::Display for FnType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "Fn({}) -> {}", Type::stringify_slice(self.in_types.as_slice()), self.out_type)
+    }
+}
+impl std::convert::From<FnType> for Type {
+    fn from(fn_type: FnType) -> Self {
+        Type::Fn(fn_type)
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Type {
     Nil,
     Any,
     Num,
     Distr,
     Seq(Box<Type>),
-    Fn{in_types: Vec<Type>, out_type: Box<Type>}
+    Fn(FnType),
 }
 
 impl std::fmt::Display for Type {
@@ -16,9 +31,7 @@ impl std::fmt::Display for Type {
             Type::Num => write!(f, "Num"),
             Type::Distr => write!(f, "Distr"),
             Type::Seq(ref inner_type) => write!(f, "Seq<{}>", inner_type),
-            Type::Fn{ref in_types, ref out_type} => {
-                write!(f, "Fn({}) -> {}", Type::stringify_slice(in_types), out_type)
-            }
+            Type::Fn(ref fn_type) => write!(f, "{}", fn_type),
         }
     }
 }
@@ -39,9 +52,9 @@ impl Type {
         }
         s
     }
-    pub fn try_to_fn(&self) -> Option<(&[Type], &Type)> {
-        if let Type::Fn {ref in_types, ref out_type} = *self {
-            Some((in_types.as_slice(), out_type.as_ref()))
+    pub fn try_to_fn(&self) -> Option<&FnType> {
+        if let Type::Fn(ref fn_type) = *self {
+            Some(fn_type)
         } else {
             None
         }

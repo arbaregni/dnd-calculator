@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::distr::{KeyType, Distr};
 use crate::operations::Op;
-use crate::type_info::Type;
+use crate::type_info::{Type, FnType};
 use crate::env::Env;
 use crate::error::Error;
 
@@ -13,7 +13,7 @@ pub enum Symbol {
     Num(KeyType),
     Distr(Distr),
     Seq(Vec<Symbol>),
-    Fn(Box<fn(Vec<Symbol>) -> Symbol>, Type),
+    Fn(Box<fn(Vec<Symbol>) -> Symbol>, FnType),
     Apply{func: Box<Symbol>, exprs: Vec<Symbol>},
     ApplyBuiltin(Vec<Symbol>, Op),
     Assigner{name: String, def_type: Option<Type>, expr: Box<Symbol>},
@@ -89,11 +89,11 @@ impl Symbol {
             },
             Symbol::Apply {ref func, ref exprs} => {
                 println!("{}Apply", indent);
-                func.walk(env, indent_level + 4);
-                println!("{} to ", indent);
                 for exp in exprs {
                     exp.walk(env, indent_level + 4);
                 }
+                println!("{} to ", indent);
+                func.walk(env, indent_level + 4);
             },
             Symbol::Assigner {ref name, ref def_type, ref expr} => {
                 println!("{}Assigner[{}: {:?}]", indent, name, def_type);
@@ -106,7 +106,7 @@ impl Symbol {
             Symbol::Nil => Ok(Type::Nil),
             Symbol::Num(_) => Ok(Type::Num),
             Symbol::Distr(_) => Ok(Type::Distr),
-            Symbol::Fn(_, ref type_) => Ok(type_.clone()),
+            Symbol::Fn(_, ref type_) => Ok(type_.clone().into()),
             Symbol::Seq(ref v) => {
                 for symbol in v {
                     let _ = symbol.type_check(env)?;
@@ -119,7 +119,7 @@ impl Symbol {
                 let type_args = exprs.iter().map(|arg| arg.type_check(env)).collect::<Result<Vec<Type>, Error>>()?;
                 let fn_type = func.type_check(env)?;
                 if fn_type.is_any() { return Ok(Type::Any); }
-                if let Type::Fn {ref in_types, ref out_type} = func.type_check(env)? {
+                if let Type::Fn(FnType {ref in_types, ref out_type}) = func.type_check(env)? {
                     // each type in our argument much be coercible to the corresponding in_type in the signature
                     if in_types.iter().zip(type_args.iter()).all(|(expected, found)| found.coercible_to(expected)) {
                         Ok(*out_type.clone())

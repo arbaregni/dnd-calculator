@@ -17,6 +17,15 @@ impl Env {
         self.var_types.insert(name, type_);
         self
     }
+    pub fn bind_fn_var(&mut self, name: String, value: Symbol) -> &mut Env {
+        if let Symbol::Fn(fn_ptr, fn_type) = value {
+            self.var_types.insert(name.clone(), fn_type.clone().into());
+            self.var_symbols.insert(name, Symbol::Fn(fn_ptr, fn_type));
+        } else {
+            panic!("bind fn var needed a Symbol::Fn")
+        }
+        self
+    }
     pub fn lookup_var(&self, name: &str) -> Option<(&Symbol, &Type)> {
         self.var_types.get(name)
             .and_then(|type_| self.var_symbols.get(name).map(|symbol| (symbol, type_)))
