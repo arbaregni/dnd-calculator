@@ -37,7 +37,7 @@ pub fn read_eval_print(line: &str, env: &mut Env) -> Result<Symbol, Error> {
     println!("environment: {:?}", env);
     let ast: Symbol = parse::parse_line(line, env)?;
     let type_ = ast.type_check(&env)?;
-    ast.walk(0);
+    ast.walk(env, 0);
     println!("{}", ast.repr());
     println!("=>{:?}", type_);
     println!();
@@ -50,7 +50,7 @@ fn main() {
     use type_info::Type;
     let mut env = Env::new();
     env
-        .bind_var("foo".to_string(), Symbol::Func(Box::new(|vec| vec[0].clone())), Type::Fn{ in_types: vec![Type::Any], out_type: Box::new(Type::Any) });
+        .bind_var("foo".to_string(), Symbol::Fn(Box::new(|vec| vec[0].clone()), Type::Fn {in_types: vec![Type::Distr], out_type: Box::new(Type::Distr)}), Type::Fn{ in_types: vec![Type::Distr], out_type: Box::new(Type::Distr) });
 //        .bind_var(vec!["func-name".to_string(), "arg1".to_string()], Symbol::from("arg1".to_string()));
     loop {
         let line = prompt_user("/>  ").unwrap();

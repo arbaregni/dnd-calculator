@@ -13,7 +13,7 @@ pub enum Symbol {
     Num(KeyType),
     Distr(Distr),
     Seq(Vec<Symbol>),
-    Func(Box<fn(Vec<Symbol>) -> Symbol>),
+    Fn(Box<fn(Vec<Symbol>) -> Symbol>, Type),
     Apply{func: Box<Symbol>, exprs: Vec<Symbol>},
     ApplyBuiltin(Vec<Symbol>, Op),
     Assigner{name: String, def_type: Option<Type>, expr: Box<Symbol>},
@@ -43,19 +43,13 @@ impl Symbol {
             _ => Err(fail!("{} is not a string", self.repr()))
         }
     }
-    pub fn expect_func(&self) -> &Box<fn(Vec<Symbol>) -> Symbol> {
-        match *self {
-            Symbol::Func(ref func) => func,
-            _ => panic!("{:?} is not a func", self),
-        }
-    }
     pub fn repr(&self) -> String {
         match *self {
             Symbol::Nil => format!("Nil"),
             Symbol::Text(ref s) => format!("{}", s),
             Symbol::Num(n) => format!("{}", n),
             Symbol::Distr(ref d) => d.stat_view(),
-            Symbol::Func(ref func) => format!("<lambda at {:?}>", func),
+            Symbol::Fn(ref func, ref type_) => format!("<{} at {:?}>", type_, func),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
             Symbol::ApplyBuiltin(ref args, op) => op.repr(args),
             Symbol::Apply { ref func, ref exprs } => format!("({} >> {})", exprs.iter().map(Symbol::repr).collect::<Vec<String>>().join(" "), func.repr()),
@@ -67,38 +61,43 @@ impl Symbol {
             },
         }
     }
-    pub fn walk(&self, indent_level: usize) {
+    pub fn walk(&self, env: &Env, indent_level: usize) {
         let indent: &String = &(0..indent_level).map(|_| ' ').collect();
         match *self {
             Symbol::Nil => println!("{}Nil", indent),
-            Symbol::Text(ref text) => println!("{}Text: {}", indent, text),
+            Symbol::Text(ref text) => {
+                println!("{}Text {} := ", indent, text);
+                if let Some((ref symbol, _)) = env.lookup_var(text) {
+                    symbol.walk(env, indent_level + 4);
+                }
+            },
             Symbol::Num(num) => println!("{}Num: {}", indent, num),
             Symbol::Distr(ref distr) => println!("{}Distr{}", indent, distr.stat_view()),
-            Symbol::Func(ref func) => println!("{}<lambda at {:?}>", indent, func),
+            Symbol::Fn(_, _) => println!("{}{}", indent, self.repr()),
             Symbol::Seq(ref v) => {
                 println!("{}Seq: [", indent);
                 for symbol in v {
-                    symbol.walk(indent_level + 4);
+                    symbol.walk(env, indent_level + 4);
                 }
                 println!("{}]", indent);
             }
             Symbol::ApplyBuiltin(ref args, op) => {
                 println!("{}{:?}", indent, op);
                 for arg in args {
-                    arg.walk(indent_level + 4);
+                    arg.walk(env, indent_level + 4);
                 }
             },
             Symbol::Apply {ref func, ref exprs} => {
                 println!("{}Apply", indent);
-                func.walk(indent_level + 4);
+                func.walk(env, indent_level + 4);
                 println!("{} to ", indent);
                 for exp in exprs {
-                    exp.walk(indent_level + 4);
+                    exp.walk(env, indent_level + 4);
                 }
             },
             Symbol::Assigner {ref name, ref def_type, ref expr} => {
                 println!("{}Assigner[{}: {:?}]", indent, name, def_type);
-                expr.walk(indent_level + 4);
+                expr.walk(env, indent_level + 4);
             }
         }
     }
@@ -107,7 +106,7 @@ impl Symbol {
             Symbol::Nil => Ok(Type::Nil),
             Symbol::Num(_) => Ok(Type::Num),
             Symbol::Distr(_) => Ok(Type::Distr),
-            Symbol::Func(_) => Ok(Type::Any),
+            Symbol::Fn(_, ref type_) => Ok(type_.clone()),
             Symbol::Seq(ref v) => {
                 for symbol in v {
                     let _ = symbol.type_check(env)?;
@@ -157,17 +156,17 @@ impl Symbol {
     }
     pub fn eval(&self, env: &mut Env) -> Result<Cow<Symbol>, Error> {
         Ok(match self {
-            Symbol::Nil | Symbol::Num(_) | Symbol::Distr(_) | Symbol::Func(_) => Cow::Borrowed(self),
+            Symbol::Nil | Symbol::Num(_) | Symbol::Distr(_) | Symbol::Fn(_, _) => Cow::Borrowed(self),
             Symbol::Seq(ref v) => {
                 // evaluate each item and put it back in a sequence
                 Cow::Owned(Symbol::Seq(v.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?))
             }
             Symbol::Apply {ref func, ref exprs} => Cow::Owned({
                 // evaluate each argument
-                let eval_args: Vec<Symbol> = exprs.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?;
+                let eval_args = exprs.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?;
                 let eval_func = func.eval(env)?;
-                if let Symbol::Func(ref fnptr) = *eval_func {
-                    fnptr(eval_args)
+                if let Symbol::Fn(ref fn_ptr, ref fn_type) = *eval_func {
+                    fn_ptr(eval_args)
                 } else {
                     return Err(fail!("not a function: `{}`", eval_func.repr()))
                 }

@@ -39,6 +39,13 @@ impl Type {
         }
         s
     }
+    pub fn try_to_fn(&self) -> Option<(&[Type], &Type)> {
+        if let Type::Fn {ref in_types, ref out_type} = *self {
+            Some((in_types.as_slice(), out_type.as_ref()))
+        } else {
+            None
+        }
+    }
     pub fn is_any(&self) -> bool { *self == Type::Any }
     pub fn coercible_to(&self, type_: &Type) -> bool {
         // Type::Any can be coerced into anything and anything can be coerced into Type::Any
