@@ -155,26 +155,26 @@ impl Symbol {
             }
         }
     }
-    pub fn eval(&self, env: &mut Env) -> Cow<Symbol> {
-        match self {
+    pub fn eval(&self, env: &mut Env) -> Result<Cow<Symbol>, Error> {
+        Ok(match self {
             Symbol::Nil | Symbol::Num(_) | Symbol::Distr(_) | Symbol::Func(_) => Cow::Borrowed(self),
             Symbol::Seq(ref v) => {
                 // evaluate each item and put it back in a sequence
-                Cow::Owned(Symbol::Seq(v.iter().map(|expr| expr.eval(env).into_owned()).collect()))
+                Cow::Owned(Symbol::Seq(v.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?))
             }
             Symbol::Apply {ref func, ref exprs} => Cow::Owned({
                 // evaluate each argument
-                let eval_args: Vec<Symbol> = exprs.iter().map(|expr| expr.eval(env).into_owned()).collect();
-                let eval_func = func.eval(env);
+                let eval_args: Vec<Symbol> = exprs.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?;
+                let eval_func = func.eval(env)?;
                 if let Symbol::Func(ref fnptr) = *eval_func {
                     fnptr(eval_args)
                 } else {
-                    panic!("not a function: `{}`", eval_func.repr())
+                    return Err(fail!("not a function: `{}`", eval_func.repr()))
                 }
             }),
             Symbol::ApplyBuiltin(args, op) => Cow::Owned({
-                let eval_args: Vec<Cow<Symbol>> = args.iter().map(|arg| arg.eval(env)).collect();
-                op.eval(eval_args)
+                let eval_args: Vec<Cow<Symbol>> = args.iter().map(|arg| arg.eval(env)).collect::<Result<Vec<Cow<Symbol>>, Error>>()?;
+                op.eval(eval_args)?
             }),
             Symbol::Text(ref name) => {
                 if let Some(value) = env.lookup_var(name).map(|(x, _)| x.clone()) {
@@ -184,12 +184,12 @@ impl Symbol {
                 }
             },
             Symbol::Assigner {ref name, def_type: _, ref expr} => {
-                let value = expr.eval(env);
-                let type_ = value.type_check(env).expect("right side of assignment evaluated into an malformed symbol");
+                let value = expr.eval(env)?;
+                let type_ = value.type_check(env)?;
                 env.bind_var(name.clone(), value.into_owned(), type_);
                 Cow::Owned(Symbol::Nil)
             }
-        }
+        })
     }
 }
 impl std::convert::From<KeyType> for Symbol {

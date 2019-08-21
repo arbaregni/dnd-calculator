@@ -41,7 +41,7 @@ pub fn read_eval_print(line: &str, env: &mut Env) -> Result<Symbol, Error> {
     println!("{}", ast.repr());
     println!("=>{:?}", type_);
     println!();
-    let res = ast.eval(env).into_owned();
+    let res = ast.eval(env)?.into_owned();
     println!("{:?}", res);
     Ok(res)
 }

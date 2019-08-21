@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use crate::error::Error;
 
 pub type KeyType = i32;
 pub type ProbType = f64;
@@ -59,6 +60,16 @@ impl Distr {
             }
         }
         distr
+    }
+    pub fn combine_fallible_op<F>(&self, other: &Distr, op: F) -> Result<Distr, Error>
+        where F: Fn(KeyType, KeyType) -> Result<KeyType, Error> {
+        let mut distr = Distr::new();
+        for ref x in self.iter() {
+            for ref y in other.iter() {
+                distr.update_prob((op)(**x, **y)?, self.prob(**x) * other.prob(**y));
+            }
+        }
+        Ok(distr)
     }
     pub fn stat_view(&self) -> String {
         format!("<Mean: {:.3}, Stdev: {:.3}>", self.mean(), self.stdev())
