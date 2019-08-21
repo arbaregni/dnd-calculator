@@ -38,11 +38,8 @@ pub fn read_eval_print(line: &str, env: &mut Env) -> Result<Symbol, Error> {
     ast.walk(env, 0);
     let type_ = ast.type_check(&env)?;
     println!("{}", ast.repr());
-    println!("=>{:?}", type_);
-    println!();
-    let res = ast.eval(env)?.into_owned();
-    println!("{:?}", res);
-    Ok(res)
+    println!("=>{}", type_);
+    Ok(ast.eval(env)?.into_owned())
 }
 fn main() {
     println!("opening dnd calculator session");
@@ -57,11 +54,19 @@ fn main() {
         ));
     loop {
         let line = prompt_user("/>  ").unwrap();
-        if let Err(err) = read_eval_print(&line, &mut env) {
-            if let Some(span) = err.opt_span {
-                println!("{}", Error::underline(&line, span));
+        println!("-------------------------");
+        let res = read_eval_print(&line, &mut env);
+        println!("-------------------------");
+        match res {
+            Ok(symbol) => {
+                println!(" {:?}\n{}", symbol, symbol.repr());
             }
-            println!("{}", err);
-        };
+            Err(err) => {
+                if let Some(span) = err.opt_span {
+                    println!("{}", Error::underline(&line, span));
+                }
+                println!("{}", err);
+            }
+        }
     }
 }

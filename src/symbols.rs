@@ -48,7 +48,7 @@ impl Symbol {
             Symbol::Nil => format!("Nil"),
             Symbol::Text(ref s) => format!("{}", s),
             Symbol::Num(n) => format!("{}", n),
-            Symbol::Distr(ref d) => d.stat_view(),
+            Symbol::Distr(ref d) => d.try_cast().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
             Symbol::Fn(ref func, ref type_) => format!("<{} at {:?}>", type_, func),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
             Symbol::ApplyBuiltin(ref args, op) => op.repr(args),
@@ -124,7 +124,7 @@ impl Symbol {
                     if in_types.iter().zip(type_args.iter()).all(|(expected, found)| found.coercible_to(expected)) {
                         Ok(*out_type.clone())
                     } else {
-                        Err(fail!("function application expected signature {}, not {}", Type::stringify_slice(in_types), Type::stringify_slice(&type_args)))
+                        Err(fail!("bad function application signtur"))
                     }
                 } else {
                     Err(fail!("not a function: {}, found type {}", func.repr(), type_))
