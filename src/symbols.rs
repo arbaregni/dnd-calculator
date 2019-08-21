@@ -117,9 +117,9 @@ impl Symbol {
             Symbol::Apply {ref func, ref exprs} => {
                 // check the type of each input
                 let type_args = exprs.iter().map(|arg| arg.type_check(env)).collect::<Result<Vec<Type>, Error>>()?;
-                let fn_type = func.type_check(env)?;
-                if fn_type.is_any() { return Ok(Type::Any); }
-                if let Type::Fn(FnType {ref in_types, ref out_type}) = func.type_check(env)? {
+                let type_ = func.type_check(env)?;
+                if type_.is_any() { return Ok(Type::Any); }
+                if let Type::Fn(FnType {ref in_types, ref out_type}) = type_ {
                     // each type in our argument much be coercible to the corresponding in_type in the signature
                     if in_types.iter().zip(type_args.iter()).all(|(expected, found)| found.coercible_to(expected)) {
                         Ok(*out_type.clone())
@@ -127,7 +127,7 @@ impl Symbol {
                         Err(fail!("function application expected signature {}, not {}", Type::stringify_slice(in_types), Type::stringify_slice(&type_args)))
                     }
                 } else {
-                    Err(fail!("not a function: {}", func.repr()))
+                    Err(fail!("not a function: {}, found type {}", func.repr(), type_))
                 }
             },
             Symbol::ApplyBuiltin(ref args, op) => {

@@ -1,10 +1,8 @@
-#[macro_use]
-extern crate lazy_static;
+#[macro_use] extern crate lazy_static;
 
-#[macro_use]
-mod error;
+#[macro_use] mod error;
+#[macro_use] mod type_info;
 mod ptokens;
-mod type_info;
 mod operations;
 mod env;
 mod parse;
@@ -37,8 +35,8 @@ fn prompt_user(prompt: &str) -> io::Result<String> {
 pub fn read_eval_print(line: &str, env: &mut Env) -> Result<Symbol, Error> {
     println!("environment: {:?}", env);
     let ast: Symbol = parse::parse_line(line, env)?;
-    let type_ = ast.type_check(&env)?;
     ast.walk(env, 0);
+    let type_ = ast.type_check(&env)?;
     println!("{}", ast.repr());
     println!("=>{:?}", type_);
     println!();
@@ -52,9 +50,11 @@ fn main() {
     let mut env = Env::new();
     env
         .bind_fn_var("I".to_string(), Symbol::Fn(Box::new(|vec| vec[0].clone()),
-                                                 FnType{ in_types: vec![Type::Distr], out_type: Box::new(Type::Distr) }))
+                                                 fn_type!(Type::Distr, -> Type::Distr)
+        ))
         .bind_fn_var("K".to_string(), Symbol::Fn(Box::new(|vec| vec[1].clone()),
-                                                 FnType{ in_types: vec![Type::Distr, Type::Distr], out_type: Box::new(Type::Distr) }));
+                                                 fn_type!(Type::Distr, Type::Distr, -> Type::Distr)
+        ));
     loop {
         let line = prompt_user("/>  ").unwrap();
         if let Err(err) = read_eval_print(&line, &mut env) {

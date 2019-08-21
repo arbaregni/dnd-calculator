@@ -132,7 +132,7 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
                 "*" | "/" => 55,
                 "+" | "-" => 54,
                 ">>" => 0,
-                _ => panic!("unexpected keyword: {} (could not assign precedence)", curr_kwrd)
+                _ => return Err(fail_at!(ptokens[i].span, "unexpected keyword: `{}` (could not assign precedence)", curr_kwrd))
             };
             if let Some((_, _, prec)) = lowest {
                 // the current precedence must be strictly greater in order to default to the left most operator
