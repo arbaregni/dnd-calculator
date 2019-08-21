@@ -33,7 +33,7 @@ impl Symbol {
     pub fn try_to_num(&self) -> Result<Cow<KeyType>, Error> {
         match *self {
             Symbol::Num(num) => Ok(Cow::Owned(num)),
-            Symbol::Distr(ref d) => Ok(Cow::Owned(d.try_cast()?)),
+            Symbol::Distr(ref d) => Ok(Cow::Owned(d.try_to_num()?)),
             _ => Err(fail!("{} is not a number", self.repr())),
         }
     }
@@ -48,7 +48,7 @@ impl Symbol {
             Symbol::Nil => format!("Nil"),
             Symbol::Text(ref s) => format!("{}", s),
             Symbol::Num(n) => format!("{}", n),
-            Symbol::Distr(ref d) => d.try_cast().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
+            Symbol::Distr(ref d) => d.try_to_num().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
             Symbol::Fn(ref func, ref type_) => format!("<{} at {:?}>", type_, func),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
             Symbol::ApplyBuiltin(ref args, op) => op.repr(args),

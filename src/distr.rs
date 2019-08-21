@@ -101,11 +101,14 @@ impl Distr {
         s
     }
 
-    pub fn try_cast(&self) -> Result<KeyType, Error> {
-        self.iter()
+    pub fn try_to_num(&self) -> Result<KeyType, Error> {
+        if self.len() != 1 {
+            return Err(fail!("could not convert distribution {:?} into a number", self));
+        }
+        Ok(self.iter()
             .nth(0)
             .map(|x| *x)
-            .ok_or_else(|| fail!("could not convert distribution {:?} into a number", self))
+            .unwrap())
     }
 
 }
