@@ -123,6 +123,7 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
             return Ok(symbol);
         }
     }
+
     // scan the pseudo tokens for the lowest precedence operator, its index, and its precedence value
     // store the lowest precedence (keyworded text, index, precedence)
     let mut lowest: Option<(&str, usize, u32)> = None; // todo creating a sorted list of operators be more efficient?
@@ -151,11 +152,8 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
             // no operator: it's a function call on the first ptoken
             let target = ptokens[0]
                 .try_to_expr().ok_or(fail_at!(ptokens[0].span, "expected an expression for function call on this"))?;
-            let args = ptokens[1..]
-                .iter()
-                .map(|ptoken| ptoken.try_to_expr().ok_or(fail_at!(ptoken.span, "expected an expression as an argument to a function call")))
-                .collect::<Result<Vec<Symbol>, Error>>()?;
-            return Ok(Symbol::Apply { target: target.into_boxed(), args });
+            let arg = parse_expr(&ptokens[1..], env)?;
+            return Ok(Symbol::Apply { target: target.into_boxed(), args: vec![arg] });
         }
     };
     let parse_left = || parse_expr(&ptokens[..idx], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse left hand operand of operator `{}`", kwrd));
@@ -163,17 +161,6 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     Ok(
         // todo move into a 'sugar' file
         match kwrd {
-            /*
-            "d" if idx == 0 => Symbol::ApplyBuiltin(vec![parse_right()?], Op::MakeDiceSingle),
-            "d" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::MakeDice),
-            "*" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Mul),
-            "/" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Div),
-            "+" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Add),
-            "-" => Symbol::Fn{
-                ptr: crate::operations::,
-                type_: fn_type!(Type::Distr, Type::Distr, -> Type::Distr),
-                exprs: vec![parse_left()?, parse_right()?]
-            }*/
             "d" if idx == 0 => Symbol::Apply{target: Box::new("make-dice".to_string().into()), args: vec![1.into(), parse_right()?]},
             "d" => Symbol::Apply{target: Box::new("make-dice".to_string().into()), args: vec![parse_left()?, parse_right()?]},
             "*" => Symbol::Apply{target: Box::new("mul".to_string().into()), args: parse_either_side(ptokens, env, idx)?},

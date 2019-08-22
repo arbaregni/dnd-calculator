@@ -146,7 +146,7 @@ impl Symbol {
                     for (i, (arg, expected_type)) in args.iter().zip(fn_type.in_types.iter()).enumerate() {
                         let found_type = arg.type_check(env)?;
                         if !found_type.coercible_to(expected_type) {
-                            return Err(fail!("incorrect signature for function at position {}: expected type {}, {}", i, expected_type, found_type))
+                            return Err(fail!("incorrect signature for function at position {}: expected type {}, found type {}", i, expected_type, found_type))
                         }
                     }
                     if args.len() < fn_type.in_types.len() {
