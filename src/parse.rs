@@ -1,6 +1,5 @@
 use crate::ptokens::{PToken, PTokenKind, MaybeHasSpan};
 use crate::symbols::Symbol;
-use crate::operations::Op;
 use crate::env::Env;
 use crate::error::Error;
 use crate::error::ConcatErr;
@@ -148,7 +147,16 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     }
     let (kwrd, idx, _) = match lowest {
         Some(info) => info,
-        None => return Err(fail_at!(ptokens.get_opt_span().expect("ptokens of len 1 and len 0 should be checked already"), "no operator found here"))
+        None => {
+            // no operator: it's a function call on the first ptoken
+            let target = ptokens[0]
+                .try_to_expr().ok_or(fail_at!(ptokens[0].span, "expected an expression for function call on this"))?;
+            let args = ptokens[1..]
+                .iter()
+                .map(|ptoken| ptoken.try_to_expr().ok_or(fail_at!(ptoken.span, "expected an expression as an argument to a function call")))
+                .collect::<Result<Vec<Symbol>, Error>>()?;
+            return Ok(Symbol::Apply { target: target.into_boxed(), args });
+        }
     };
     let parse_left = || parse_expr(&ptokens[..idx], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse left hand operand of operator `{}`", kwrd));
     let parse_right = || parse_expr(&ptokens[idx+1..], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse right hand operand of operator `{}`", kwrd));
@@ -166,6 +174,8 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
                 type_: fn_type!(Type::Distr, Type::Distr, -> Type::Distr),
                 exprs: vec![parse_left()?, parse_right()?]
             }*/
+            "d" if idx == 0 => Symbol::Apply{target: Box::new("make-dice".to_string().into()), args: vec![1.into(), parse_right()?]},
+            "d" => Symbol::Apply{target: Box::new("make-dice".to_string().into()), args: vec![parse_left()?, parse_right()?]},
             "*" => Symbol::Apply{target: Box::new("mul".to_string().into()), args: parse_either_side(ptokens, env, idx)?},
             "/" => Symbol::Apply{target: Box::new("div".to_string().into()), args: parse_either_side(ptokens, env, idx)?},
             "+" => Symbol::Apply{target: Box::new("add".to_string().into()), args: parse_either_side(ptokens, env, idx)?},

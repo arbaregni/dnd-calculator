@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use crate::distr::{KeyType, Distr};
-use crate::operations;
 use crate::type_info::{Type, FnType};
 use crate::env::Env;
 use crate::error::Error;

@@ -82,7 +82,7 @@ impl Distr {
         let max_x: KeyType = *self.iter().max().unwrap();
 //        let min_p = self.iter().map(|x| self.prob(*x)).fold(0./0., f64::min);
         let max_p = self.iter().map(|x| self.prob(*x)).fold(0./0., f64::max);
-        assert!(0.0 < max_p && max_p < 1.0);
+        assert!(0.0 <= max_p && max_p <= 1.0);
 
         let mut s = String::new();
 

@@ -3,7 +3,7 @@
 #[macro_use] mod error;
 #[macro_use] mod type_info;
 mod ptokens;
-mod operations;
+mod std_imports;
 mod env;
 mod parse;
 mod symbols;
@@ -47,6 +47,7 @@ fn main() {
     let mut env = Env::new();
     env
         .import_arithmetic()
+        .import_dice()
         .bind_fn_var("I".to_string(), Box::new(|vec| vec[0].clone()),
                                                  fn_type!(Type::Distr, -> Type::Distr)
         )

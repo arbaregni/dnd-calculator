@@ -1,7 +1,6 @@
 use crate::symbols::Symbol;
 use crate::distr::KeyType;
 use crate::error::Error;
-use std::any::Any;
 
 #[derive(Debug)]
 pub struct PToken {
