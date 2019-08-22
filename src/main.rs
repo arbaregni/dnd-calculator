@@ -46,6 +46,7 @@ fn main() {
     use type_info::Type;
     let mut env = Env::new();
     env
+        .import_arithmetic()
         .bind_fn_var("I".to_string(), Box::new(|vec| vec[0].clone()),
                                                  fn_type!(Type::Distr, -> Type::Distr)
         )

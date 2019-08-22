@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::distr::{KeyType, Distr};
-use crate::operations::Op;
+use crate::operations;
 use crate::type_info::{Type, FnType};
 use crate::env::Env;
 use crate::error::Error;
@@ -38,7 +38,6 @@ pub enum Symbol {
     /// ```
     Fn{ptr: Box<fn(Vec<Symbol>) -> Symbol>, type_: FnType, exprs: Vec<Symbol>},
     Apply{target: Box<Symbol>, args: Vec<Symbol>},
-    ApplyBuiltin(Vec<Symbol>, Op),
     Assigner{name: String, def_type: Option<Type>, expr: Box<Symbol>},
 }
 
@@ -74,7 +73,6 @@ impl Symbol {
             Symbol::Distr(ref d) => d.try_to_num().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
             Symbol::Fn{ref ptr, ref type_, ref exprs} => format!("<{} at {:?}>", type_, ptr),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
-            Symbol::ApplyBuiltin(ref args, op) => op.repr(args),
             Symbol::Apply { ref target, ref args } => format!("({} >> {})", args.iter().map(Symbol::repr).collect::<Vec<String>>().join(" "), target.repr()),
             Symbol::Assigner { ref name, ref def_type, ref expr } => {
                 match def_type {
@@ -111,12 +109,6 @@ impl Symbol {
                 }
                 println!("{}]", indent);
             }
-            Symbol::ApplyBuiltin(ref args, op) => {
-                println!("{}{:?}", indent, op);
-                for arg in args {
-                    arg.walk(env, indent_level + 4);
-                }
-            },
             Symbol::Apply {ref target, ref args} => {
                 println!("{}Apply", indent);
                 for arg in args {
@@ -168,10 +160,6 @@ impl Symbol {
                 } else {
                     return Err(fail!("not a function: {}, found type {}", target.repr(), type_));
                 }
-            },
-            Symbol::ApplyBuiltin(ref args, op) => {
-                let type_args: Result<Vec<Type>, Error> = args.iter().map(|arg| arg.type_check(env)).collect();
-                op.type_check(type_args?)
             },
             Symbol::Text(ref name) => {
                 if let Some((_, type_)) = env.lookup_var(name) {
@@ -227,10 +215,6 @@ impl Symbol {
                 } else {
                     return Err(fail!("not a function: {}", eval_func.repr()))
                 }
-            }),
-            Symbol::ApplyBuiltin(args, op) => Cow::Owned({
-                let eval_args = args.iter().map(|arg| arg.eval(env)).collect::<Result<Vec<Cow<Symbol>>, Error>>()?;
-                op.eval(eval_args)?
             }),
             Symbol::Text(ref name) => {
                 if let Some(value) = env.lookup_var(name).map(|(x, _)| x.clone()) {

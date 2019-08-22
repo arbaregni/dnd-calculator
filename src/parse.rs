@@ -153,13 +153,23 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     let parse_left = || parse_expr(&ptokens[..idx], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse left hand operand of operator `{}`", kwrd));
     let parse_right = || parse_expr(&ptokens[idx+1..], env).concat_err(fail_at!(ptokens[idx].span, "Could not parse right hand operand of operator `{}`", kwrd));
     Ok(
+        // todo move into a 'sugar' file
         match kwrd {
+            /*
             "d" if idx == 0 => Symbol::ApplyBuiltin(vec![parse_right()?], Op::MakeDiceSingle),
             "d" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::MakeDice),
             "*" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Mul),
             "/" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Div),
             "+" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Add),
-            "-" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Sub),
+            "-" => Symbol::Fn{
+                ptr: crate::operations::,
+                type_: fn_type!(Type::Distr, Type::Distr, -> Type::Distr),
+                exprs: vec![parse_left()?, parse_right()?]
+            }*/
+            "*" => Symbol::Apply{target: Box::new("mul".to_string().into()), args: parse_either_side(ptokens, env, idx)?},
+            "/" => Symbol::Apply{target: Box::new("div".to_string().into()), args: parse_either_side(ptokens, env, idx)?},
+            "+" => Symbol::Apply{target: Box::new("add".to_string().into()), args: parse_either_side(ptokens, env, idx)?},
+            "-" => Symbol::Apply{target: Box::new("sub".to_string().into()), args: parse_either_side(ptokens, env, idx)?},
             ">>" => Symbol::Apply{args: vec![parse_left()?], target: parse_right()?.into_boxed()}, // todo multiple input: is this part of the same deal as partial application?
             op => return Err(fail_at!(ptokens[idx].span, "no operator found with name: {}", op)),
         }
@@ -227,4 +237,17 @@ fn parse_pat(ptokens: &[PToken]) -> Result<String, Error> {
         0 => Err(fail!("unexpected EOF while parsing pattern")),
         _ => Err(fail_at!(ptokens.get_opt_span().unwrap(), "not valid pattern (too many tokens)"))
     }
+}
+
+fn parse_either_side(ptokens: &[PToken], env: &Env, pivot: usize) -> Result<Vec<Symbol>, Error> {
+    let mut vec = vec![];
+    if !ptokens[..pivot].is_empty() {
+        vec.push(parse_expr(&ptokens[..pivot], env)
+                     .concat_err(fail_at!(ptokens[pivot].span, "could not parse left hand operand of operator"))?);
+    }
+    if !ptokens[pivot+1..].is_empty() {
+        vec.push(parse_expr(&ptokens[pivot+1..], env)
+            .concat_err(fail_at!(ptokens[pivot].span, "could not parse right hand operand of operator"))?);
+    }
+    Ok(vec)
 }

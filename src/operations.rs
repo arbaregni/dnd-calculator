@@ -1,8 +1,26 @@
-use crate::type_info::Type;
+use crate::type_info::{Type, FnType};
 use crate::symbols::Symbol;
 use crate::error::Error;
+use crate::distr::Distr;
 
 use std::borrow::Cow;
+use crate::env::Env;
+
+impl Env {
+    pub fn import_arithmetic(&mut self) -> &mut Self {
+        self
+            // MULTIPLICATION
+            .bind_fn_var("mul".to_string(), Box::new(|args| {
+                args[0].try_to_distr().and_then(|left|
+                    args[1].try_to_distr().and_then(|right|
+                        Ok(left.as_ref().combine_op(right.as_ref(), |x, y| x * y).into())
+                    )
+                ).expect("Symbol::Fn doesn't support error handling yet")
+            }), fn_type!(Type::Distr, Type::Distr, -> Type::Distr))
+        ;
+        self
+    }
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum Op {
@@ -16,7 +34,6 @@ pub enum Op {
     MakeDice,
     MakeDiceSingle,
 }
-
 impl Op {
     pub fn repr(&self, args: &Vec<Symbol>) -> String {
         match *self {
@@ -31,36 +48,9 @@ impl Op {
             Op::MakeDiceSingle => format!("d{}", args[0].repr()),
         }
     }
-    pub fn type_check(&self, arg_types: Vec<Type>) -> Result<Type, Error> {
-        macro_rules! check_arg {
-            ($idx:expr, $typ:expr) => (
-                if !arg_types[$idx].coercible_to($typ) {
-                    return Err(fail!("operation {:?} expected arg in position {} to be type {}, not {}", self, $idx, $typ, arg_types[$idx]));
-                }
-            )
-        }
-        match *self {
-            Op::Mul | Op::Div | Op::Add | Op::Sub => {
-                check_arg!(0, &Type::Distr); check_arg!(1, &Type::Distr);
-                Ok(Type::Distr)
-            },
-            Op::StatView | Op::HistView | Op::TableView => {
-                check_arg!(0, &Type::Distr);
-                Ok(Type::Nil)
-            },
-            Op::MakeDice => {
-                check_arg!(0, &Type::Num); check_arg!(1, &Type::Num);
-                Ok(Type::Distr)
-            }
-            Op::MakeDiceSingle => {
-                check_arg!(0, &Type::Num);
-                Ok(Type::Distr)
-            }
-        }
-    }
     pub fn eval(&self, args: Vec<Cow<Symbol>>) -> Result<Symbol, Error> {
         Ok(match *self {
-            Op::Mul => args[0].try_to_distr()?.combine_op(args[1].try_to_distr()?.as_ref(), |x, y| x * y).into(),
+            _ => unimplemented!(),
             Op::Div => args[0].try_to_distr()?.combine_fallible_op(args[1].try_to_distr()?.as_ref(),
                                                                    |x, y| x.checked_div(y).ok_or(fail!("zero division error")))?.into(),
             Op::Add => args[0].try_to_distr()?.combine_op(args[1].try_to_distr()?.as_ref(), |x, y| x + y).into(),
