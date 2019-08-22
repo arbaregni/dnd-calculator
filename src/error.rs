@@ -1,8 +1,7 @@
-// instantiate
+// instantiate the Error
 macro_rules! fail {
     ($reason_template:expr $(, $arg:expr)* ) => (
         Error {
-            tag: String::new(),
             reason: format!($reason_template, $($arg),*),
             opt_span: None,
             line: line!(),
@@ -14,7 +13,6 @@ macro_rules! fail {
 macro_rules! fail_at {
    ($span:expr, $reason_template:expr $(, $arg:expr)* ) => (
         Error {
-            tag: String::new(),
             reason: format!($reason_template, $($arg),*),
             opt_span: Some($span),
             line: line!(),
@@ -26,7 +24,6 @@ macro_rules! fail_at {
 
 #[derive(Clone, Debug)]
 pub struct Error {
-    pub tag: String,
     pub reason: String,
     pub opt_span: Option<(usize, usize)>,
     pub line: u32,
@@ -42,12 +39,39 @@ impl Error {
                 iter::repeat(' ').take(span.0).collect::<String>(),
                 iter::repeat('^').take(span.1-span.0).collect::<String>())
     }
-    /// take an error higher on the error chain, and concatenate it to the one below it
-    pub fn concat(self, other: Error) -> Error {
+    /// Concatenate a general error onto this, lower-level situation
+    /// # Example
+    /// ```
+    /// let specific_error = Error {
+    ///     opt_span: Some((1, 10)),
+    ///     line: 99,
+    ///     column: 0,
+    ///     file: "file".to_string(),
+    ///     reason: "the doo dad didn't work"
+    /// };
+    /// let general_error = Error {
+    ///     opt_span: Some((7, 12)),
+    ///     line: 0,
+    ///     column: 1,
+    ///     file: "general-file".to_string(),
+    ///     reason: "parser failed"
+    /// };
+    /// let new_error = specific_error.concat(general_error);
+    /// assert_eq!(new_error, Error {
+    ///     // the span is taken from the specific error, or the general error if no span information
+    ///     opt_span: Some((1, 10)),
+    ///     // the line, column, and file, are taken from the specific error
+    ///     line: 99,
+    ///     column: 0,
+    ///     file: "file".to_string(),
+    ///     // call back information is preserved in the reason
+    ///     reason: format!("  [line:0 col:1 file:general-file] parser failed\n    Caused by:   [line:99 col:0 file:file] the doo dad didn't work")
+    /// })
+    /// ```
+    pub fn concat(self, general_error: Error) -> Error {
         Error {
-            tag: self.tag,
-            opt_span: other.opt_span.or(self.opt_span), // attempt to show the lower error, or show the location of the higher level error otherwise
-            reason: format!("{}{}", self.reason, format!("\nCaused by: {}", other).replace("\n", "\n    ") ),
+            opt_span: self.opt_span.or(general_error.opt_span), // attempt to show the lower error, or show the location of the higher level error otherwise
+            reason: format!("{}{}", general_error.reason, format!("\nCaused by: {}", self).replace("\n", "\n    ") ),
             line: self.line,
             column: self.column,
             file: self.file,
@@ -56,7 +80,7 @@ impl Error {
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "  {}[line:{} col:{} file:{}] {}", self.tag, self.line, self.column, self.file, self.reason)
+        write!(f, "  [line:{} col:{} file:{}] {}", self.line, self.column, self.file, self.reason)
     }
 }
 

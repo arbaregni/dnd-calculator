@@ -16,7 +16,7 @@ use std::io;
 use std::io::Write;
 
 use symbols::Symbol;
-use crate::error::Error;
+use crate::error::{Error, ConcatErr};
 use crate::env::Env;
 use crate::type_info::FnType;
 
@@ -34,12 +34,12 @@ fn prompt_user(prompt: &str) -> io::Result<String> {
 /// read, evaluate, and then print the users line
 pub fn read_eval_print(line: &str, env: &mut Env) -> Result<Symbol, Error> {
     println!("environment: {:?}", env);
-    let ast: Symbol = parse::parse_line(line, env)?;
+    let ast: Symbol = parse::parse_line(line, env).concat_err(fail!("parser failed"))?;
     ast.walk(env, 0);
-    let type_ = ast.type_check(&env)?;
+    let type_ = ast.type_check(&env).concat_err(fail!("type checker failed"))?;
     println!("{}", ast.repr());
     println!("=>{}", type_);
-    Ok(ast.eval(env)?.into_owned())
+    Ok(ast.eval(env).concat_err(fail!("evaluator failed"))?.into_owned())
 }
 fn main() {
     println!("opening dnd calculator session");
