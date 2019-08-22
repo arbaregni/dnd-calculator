@@ -1,5 +1,5 @@
 use crate::symbols::Symbol;
-use crate::type_info::Type;
+use crate::type_info::{Type, FnType};
 
 use std::collections::HashMap;
 
@@ -17,14 +17,9 @@ impl Env {
         self.var_types.insert(name, type_);
         self
     }
-    pub fn bind_fn_var(&mut self, name: String, value: Symbol) -> &mut Env {
-        if let Symbol::Fn(fn_ptr, fn_type) = value {
-            self.var_types.insert(name.clone(), fn_type.clone().into());
-            self.var_symbols.insert(name, Symbol::Fn(fn_ptr, fn_type));
-        } else {
-            panic!("bind fn var needed a Symbol::Fn")
-        }
-        self
+    pub fn bind_fn_var(&mut self, name: String, ptr: Box<fn(Vec<Symbol>) -> Symbol>, type_: FnType) -> &mut Env {
+        let value = Symbol::Fn {ptr, type_: type_.clone(), exprs: vec![]};
+        self.bind_var(name, value, type_.into())
     }
     pub fn lookup_var(&self, name: &str) -> Option<(&Symbol, &Type)> {
         self.var_types.get(name)

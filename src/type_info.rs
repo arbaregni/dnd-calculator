@@ -24,6 +24,18 @@ impl std::fmt::Display for FnType {
         write!(f, "Fn({}) -> {}", in_types, self.out_type)
     }
 }
+impl FnType {
+    /// produce a new FnType
+    /// `num`: the number of inputs to be curried
+    /// ```
+    /// let original = fn_type!(Type::Distr, Type::Nil, -> Type::Any);
+    /// let curried = original.curry(1);
+    /// assert_eq!(fn_type!(Type::Nil, -> Type::Any), curried)
+    /// ```
+    pub fn curry(&self, num: usize) -> FnType {
+        FnType { in_types: self.in_types[num..].to_vec(), out_type: self.out_type.clone() }
+    }
+}
 impl std::convert::From<FnType> for Type {
     fn from(fn_type: FnType) -> Self {
         Type::Fn(fn_type)

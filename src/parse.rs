@@ -158,7 +158,7 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
             "/" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Div),
             "+" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Add),
             "-" => Symbol::ApplyBuiltin(vec![parse_left()?, parse_right()?], Op::Sub),
-            ">>" => Symbol::Apply{exprs: vec![parse_left()?], func: parse_right()?.into_boxed()}, // todo multiple input: is this part of the same deal as partial application?
+            ">>" => Symbol::Apply{args: vec![parse_left()?], target: parse_right()?.into_boxed()}, // todo multiple input: is this part of the same deal as partial application?
             op => return Err(fail_at!(ptokens[idx].span, "no operator found with name: {}", op)),
         }
     )

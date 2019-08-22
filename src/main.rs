@@ -46,12 +46,12 @@ fn main() {
     use type_info::Type;
     let mut env = Env::new();
     env
-        .bind_fn_var("I".to_string(), Symbol::Fn(Box::new(|vec| vec[0].clone()),
+        .bind_fn_var("I".to_string(), Box::new(|vec| vec[0].clone()),
                                                  fn_type!(Type::Distr, -> Type::Distr)
-        ))
-        .bind_fn_var("K".to_string(), Symbol::Fn(Box::new(|vec| vec[1].clone()),
+        )
+        .bind_fn_var("K".to_string(), Box::new(|vec| vec[0].clone()),
                                                  fn_type!(Type::Distr, Type::Distr, -> Type::Distr)
-        ));
+        );
     loop {
         let line = prompt_user("/>  ").unwrap();
         println!("-------------------------");

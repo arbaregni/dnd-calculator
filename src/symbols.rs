@@ -5,6 +5,8 @@ use crate::operations::Op;
 use crate::type_info::{Type, FnType};
 use crate::env::Env;
 use crate::error::Error;
+use std::cmp::Ordering;
+use std::any::Any;
 
 #[derive(Clone, Debug)]
 pub enum Symbol {
@@ -13,8 +15,30 @@ pub enum Symbol {
     Num(KeyType),
     Distr(Distr),
     Seq(Vec<Symbol>),
-    Fn(Box<fn(Vec<Symbol>) -> Symbol>, FnType),
-    Apply{func: Box<Symbol>, exprs: Vec<Symbol>},
+    /// # Fields
+    /// * `ptr` - boxed pointer to the underlying function to evoke
+    /// * `type_` - FnType representing the input and output types of this function
+    /// * `exprs` - Vec of Symbols representing the already applied (captured) arguments
+    ///
+    /// # Invariant
+    /// the len of `type_.in_types` and the len of `exprs` should always equal the number of arguments that the underlying function pointer expects
+    ///
+    /// # Example
+    /// ```
+    /// let ptr = Box::new(|vec| vec[2]);
+    /// let type_ = fn_type!(Type::Num, Type::Distr, Type::Nil, -> Type::Num);
+    /// let fn_symbol = Symbol::Fn{ptr, type_, exprs: vec![]};
+    /// // at this point, the underlying pointer expects a vector of len 3
+    /// // we have not applied any inputs yet, so type_.input_types contains all the inputs
+    /// let apply_symbol = Symbol::Apply{target: fn_symbol, args: vec![Symbol::Num(1)]};
+    /// // -- snip --
+    /// // apply_symbol is evaluated
+    /// // -- snip --
+    /// // let expected_result = Symbol::Fn{ptr, type_: fn_type!(Type::Distr, Type::Nil), exprs: vec![Symbol::Num(1)]};
+    ///
+    /// ```
+    Fn{ptr: Box<fn(Vec<Symbol>) -> Symbol>, type_: FnType, exprs: Vec<Symbol>},
+    Apply{target: Box<Symbol>, args: Vec<Symbol>},
     ApplyBuiltin(Vec<Symbol>, Op),
     Assigner{name: String, def_type: Option<Type>, expr: Box<Symbol>},
 }
@@ -49,10 +73,10 @@ impl Symbol {
             Symbol::Text(ref s) => format!("{}", s),
             Symbol::Num(n) => format!("{}", n),
             Symbol::Distr(ref d) => d.try_to_num().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
-            Symbol::Fn(ref func, ref type_) => format!("<{} at {:?}>", type_, func),
+            Symbol::Fn{ref ptr, ref type_, ref exprs} => format!("<{} at {:?}>", type_, ptr),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
             Symbol::ApplyBuiltin(ref args, op) => op.repr(args),
-            Symbol::Apply { ref func, ref exprs } => format!("({} >> {})", exprs.iter().map(Symbol::repr).collect::<Vec<String>>().join(" "), func.repr()),
+            Symbol::Apply { ref target, ref args } => format!("({} >> {})", args.iter().map(Symbol::repr).collect::<Vec<String>>().join(" "), target.repr()),
             Symbol::Assigner { ref name, ref def_type, ref expr } => {
                 match def_type {
                     None => format!("{} = {}", name, expr.repr()),
@@ -73,7 +97,14 @@ impl Symbol {
             },
             Symbol::Num(num) => println!("{}Num: {}", indent, num),
             Symbol::Distr(ref distr) => println!("{}Distr{}", indent, distr.stat_view()),
-            Symbol::Fn(_, _) => println!("{}{}", indent, self.repr()),
+            Symbol::Fn { ref exprs , .. } => {
+                println!("{}{}, captured: ", indent, self.repr());
+                println!("{}[", indent);
+                for expr in exprs {
+                    expr.walk(env, indent_level + 4);
+                }
+                println!("{}]", indent);
+            },
             Symbol::Seq(ref v) => {
                 println!("{}Seq: [", indent);
                 for symbol in v {
@@ -87,13 +118,13 @@ impl Symbol {
                     arg.walk(env, indent_level + 4);
                 }
             },
-            Symbol::Apply {ref func, ref exprs} => {
+            Symbol::Apply {ref target, ref args} => {
                 println!("{}Apply", indent);
-                for exp in exprs {
-                    exp.walk(env, indent_level + 4);
+                for arg in args {
+                    arg.walk(env, indent_level + 4);
                 }
                 println!("{} to ", indent);
-                func.walk(env, indent_level + 4);
+                target.walk(env, indent_level + 4);
             },
             Symbol::Assigner {ref name, ref def_type, ref expr} => {
                 println!("{}Assigner[{}: {:?}]", indent, name, def_type);
@@ -106,7 +137,7 @@ impl Symbol {
             Symbol::Nil => Ok(Type::Nil),
             Symbol::Num(_) => Ok(Type::Num),
             Symbol::Distr(_) => Ok(Type::Distr),
-            Symbol::Fn(_, ref type_) => Ok(type_.clone().into()),
+            Symbol::Fn { ref type_, .. } => Ok(type_.clone().into()),
             Symbol::Seq(ref v) => {
                 for symbol in v {
                     let _ = symbol.type_check(env)?;
@@ -114,20 +145,29 @@ impl Symbol {
                 //todo type inference that is wicked smaht and can handle zero sized sequences
                 Ok(Type::Seq(Box::new(Type::Any)))
             }
-            Symbol::Apply {ref func, ref exprs} => {
-                // check the type of each input
-                let type_args = exprs.iter().map(|arg| arg.type_check(env)).collect::<Result<Vec<Type>, Error>>()?;
-                let type_ = func.type_check(env)?;
-                if type_.is_any() { return Ok(Type::Any); }
-                if let Type::Fn(FnType {ref in_types, ref out_type}) = type_ {
+            Symbol::Apply {ref target, ref args} => {
+                let type_ = target.type_check(env)?;
+                if type_.is_any() { return Ok(Type::Any); } // Any type skips type checking until evaluation
+                if let Type::Fn(fn_type) = type_ {
+                    if args.len() > fn_type.in_types.len() {
+                        return Err(fail!("too many arguments applied to function ({} expected {}, gave it {})", target.repr(), fn_type.in_types.len(), args.len()))
+                    }
                     // each type in our argument much be coercible to the corresponding in_type in the signature
-                    if in_types.iter().zip(type_args.iter()).all(|(expected, found)| found.coercible_to(expected)) {
-                        Ok(*out_type.clone())
+                    for (i, (arg, expected_type)) in args.iter().zip(fn_type.in_types.iter()).enumerate() {
+                        let found_type = arg.type_check(env)?;
+                        if !found_type.coercible_to(expected_type) {
+                            return Err(fail!("incorrect signature for function at position {}: expected type {}, {}", i, expected_type, found_type))
+                        }
+                    }
+                    if args.len() < fn_type.in_types.len() {
+                        // more to do: the function will be curried
+                        Ok(fn_type.curry(args.len()).into())
                     } else {
-                        Err(fail!("bad function application signtur"))
+                        // exact match: the underlying function pointer will be evoked
+                        Ok(fn_type.out_type.as_ref().clone())
                     }
                 } else {
-                    Err(fail!("not a function: {}, found type {}", func.repr(), type_))
+                    return Err(fail!("not a function: {}, found type {}", target.repr(), type_));
                 }
             },
             Symbol::ApplyBuiltin(ref args, op) => {
@@ -156,19 +196,37 @@ impl Symbol {
     }
     pub fn eval(&self, env: &mut Env) -> Result<Cow<Symbol>, Error> {
         Ok(match self {
-            Symbol::Nil | Symbol::Num(_) | Symbol::Distr(_) | Symbol::Fn(_, _) => Cow::Borrowed(self),
+            Symbol::Nil | Symbol::Num(_) | Symbol::Distr(_) | Symbol::Fn{..}=> Cow::Borrowed(self),
             Symbol::Seq(ref v) => {
                 // evaluate each item and put it back in a sequence
                 Cow::Owned(Symbol::Seq(v.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?))
             }
-            Symbol::Apply {ref func, ref exprs} => Cow::Owned({
-                // evaluate each argument
-                let eval_args = exprs.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?;
-                let eval_func = func.eval(env)?;
-                if let Symbol::Fn(ref fn_ptr, ref fn_type) = *eval_func {
-                    fn_ptr(eval_args)
+            Symbol::Apply {ref target, ref args} => Cow::Owned({
+                let eval_func = target.eval(env)?;
+                if let Symbol::Fn { ref ptr, ref type_, ref exprs} = eval_func.as_ref() {
+                    let mut new_exprs: Vec<Symbol> = vec![];
+                    new_exprs.extend_from_slice(exprs.as_slice()); // these were applied previously
+                    new_exprs.extend_from_slice(args.as_slice()); // we are applying those now
+                    println!("new_exprs: {:?}", new_exprs);
+                    match args.len().cmp(&type_.in_types.len()) {
+                        Ordering::Less => {
+                            // more to go: wrap up what we have in a Symbol::Fn
+                            Symbol::Fn { ptr: Box::clone(ptr), type_: type_.curry(args.len()), exprs: new_exprs}
+                        },
+                        Ordering::Equal => {
+                            // we are done: time to evaluate!
+                            let evaluated = new_exprs.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?;
+                            println!("evaluated: {:#?}", evaluated);
+                            ptr(evaluated)
+                        },
+                        Ordering::Greater => {
+                            // we went to far: let's complain >:(
+                            // todo make this error more helpful
+                            return Err(fail!("function {} was applied too many arguments (expected {} more, was given {})", target.repr(), type_.in_types.len(),  args.len()));
+                        },
+                    }
                 } else {
-                    return Err(fail!("not a function: `{}`", eval_func.repr()))
+                    return Err(fail!("not a function: {}", eval_func.repr()))
                 }
             }),
             Symbol::ApplyBuiltin(args, op) => Cow::Owned({
