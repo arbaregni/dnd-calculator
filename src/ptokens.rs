@@ -1,5 +1,7 @@
 use crate::symbols::Symbol;
 use crate::distr::KeyType;
+use crate::error::Error;
+use std::any::Any;
 
 #[derive(Debug)]
 pub struct PToken {
@@ -16,17 +18,21 @@ impl PToken {
     /// if possible, it parses `raw` into Symbol::Num
     /// if possible, it creates a reserved PTokenKind
     /// other wise, it creates a Symbol::Text
-    pub fn from(raw: String, span: (usize, usize)) -> PToken {
-        PToken {
-            kind: match raw.parse::<KeyType>() {
-                Ok(num) => PTokenKind::Expr(num.into()),
-                Err(_)  => match raw.as_str() { // todo only catch errors due to incorrect digits
-                    "*" | "/" | "+" | "-" | "d" | ">>" | "(" | ")" | "[" | "]" | "," | ";" | "=" => PTokenKind::Reserved(raw),
-                    _ => PTokenKind::Expr(raw.into())
+    pub fn from(raw: String, span: (usize, usize)) -> Result<PToken, Error> {
+        Ok(PToken {
+            kind: match raw.as_str() {
+                "*" | "/" | "+" | "-" | "d" | ">>" | "(" | ")" | "[" | "]" | "," | ";" | "=" => PTokenKind::Reserved(raw),
+                _ => if raw.chars().nth(0).map_or(false, char::is_numeric) {
+                    match raw.parse::<KeyType>() {
+                        Ok(num) => PTokenKind::Expr(num.into()),
+                        Err(err) => return Err(fail_at!(span, "Could not parse as integer: {}", err)),
+                    }
+                } else {
+                    PTokenKind::Expr(raw.into())
                 }
             },
             span
-        }
+        })
     }
     /// creates a PToken from the first and last pseudo tokens that were parsed into the resulting symbol
     pub fn from_symbol(symbol: Symbol, span: (usize, usize)) -> PToken {

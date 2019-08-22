@@ -78,7 +78,7 @@ fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=regex::Match<'a>>, env:
                     Err(fail_at!((mat.start(), mat.end()), "unmatched close_parenthesis"))
                 }
             }
-            _ => PToken::from(mat.as_str().to_string(), (mat.start(), mat.end())),
+            _ => PToken::from(mat.as_str().to_string(), (mat.start(), mat.end()))?,
         };
         ptokens.push(value);
     }
