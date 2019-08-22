@@ -18,7 +18,7 @@ pub fn parse_line(src: &str, env: &Env) -> Result<Symbol, Error> {
 /// Split a line into tokens as defined by the regex
 fn tokenize(src: &str) -> impl Iterator<Item=regex::Match> + '_ {
     lazy_static! {
-        static ref TOKEN_REGEX: Regex = Regex::new(r"([a-zA-Z\-_]+|[0-9]+|[\(\)\[\],]|[^\sA-Za-z0-9_\-]+)").expect("tokenization regex did not compile");
+        static ref TOKEN_REGEX: Regex = Regex::new(r"([a-zA-Z\-_]+|[0-9]+|[\(\)\[\],;]|[^\sA-Za-z0-9_\-]+)").expect("tokenization regex did not compile");
     }
     TOKEN_REGEX.find_iter(src)
 }
@@ -65,6 +65,7 @@ fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=regex::Match<'a>>, env:
                 // forget that you're inside a paren for this scenario:
                 // [   (   ]    )
                 let inner_ptokens = build_pseudo_tokens(iter, env, None, Some(mat.start()))?;
+                println!("inner_ptokens: {:?}", inner_ptokens);
                 let symbol = parse_seq(&inner_ptokens, env)?;
                 // todo can we get the span from the first paren to the last paren?
                 let span = inner_ptokens.as_slice().get_opt_span().unwrap_or((mat.start(), mat.end()));
@@ -87,9 +88,10 @@ fn build_pseudo_tokens<'a>(iter: &mut impl Iterator<Item=regex::Match<'a>>, env:
 /// Return Some(result) if it's definitely an assignment statement
 /// Return None if not
 fn parse_assignment(ptokens: &[PToken], env: &Env) -> Option<Result<Symbol, Error>> {
-    let segments = ptokens
-        .split(|ptoken| ptoken.try_to_reserved().map_or(false, |k| k == "="))
-        .collect::<Vec<&[PToken]>>();
+    let segments = match parse_delimited_list(ptokens, "=", false) {
+        Ok(s) => s,
+        Err(e) => return Some(Err(e)),
+    };
     match segments.len() {
         2 => {
             let pat = match parse_pat(segments[0]).concat_err(fail!("invalid left hand side of assignment statement")) {
@@ -171,21 +173,46 @@ fn parse_seq(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
     }
     // todo: parse other seq literals: [d6; 4] and [0..6]
     // parse semi colon syntax: [d6; 4]
-    let segments = ptokens
-        .split(|ptoken| ptoken.try_to_reserved().map_or(false, |k| k == ";"))
-        .collect::<Vec<&[PToken]>>();
+    let segments = parse_delimited_list(ptokens, ";", false).concat_err(fail!("could not parse repetition literal"))?;
     match segments.len() {
-        2 => return parse_expr(segments[0], env).concat_err(fail!("could not parse sequence")),
+        2 => return parse_expr(segments[0], env),
         0 | 1 => { } // pass: comma separated list will take care of this
         _ => return Err(fail_at!(ptokens.get_opt_span().unwrap(), "unexpected sequence syntax: too many semicolons")),
     }
 
     // parse comma separated seq: [3, 4, 5]
-    let vec = ptokens
-        .split(|ptoken| ptoken.try_to_reserved().map_or(false, |k| k == ","))
-        .map(|segment| parse_expr(segment, env).concat_err(fail!("could not parse as comma separated sequence")))
-        .collect::<Result<Vec<Symbol>, Error>>()?;
-    Ok(Symbol::Seq(vec))
+    Ok(Symbol::Seq(
+        parse_delimited_list(ptokens, ",", true)
+            .concat_err(fail!("could not parse as comma separated sequence"))?
+            .iter()
+            .map(|seg| parse_expr(seg, env))
+            .collect::<Result<Vec<Symbol>, Error>>()?
+    ))
+}
+
+fn parse_delimited_list<'a>(ptokens: &'a [PToken], deliminator: &str, deliminator_can_trail: bool) -> Result<Vec<&'a [PToken]>, Error> {
+    if ptokens.is_empty() {
+        return Ok(vec![]);
+    }
+    let segments = ptokens
+        .split(|ptoken| ptoken.try_to_reserved().map_or(false, |k| k == deliminator))
+        .collect::<Vec<&[PToken]>>();
+    // if the last segment exists and is empty, we have a trailing deliminator
+    let segments =
+        if segments.last().expect("expected non-zero ptokens").is_empty() {
+            if !deliminator_can_trail {
+                return Err(fail_at!(ptokens.last().unwrap().span, "trailing deliminator is not allowed"));
+            } else {
+                &segments[..segments.len()-1] // slice away the garbage
+            }
+        } else {
+            &segments[..]
+        };
+    Ok(segments
+        .iter()
+        .map(|&seg| seg)
+        .collect()
+    )
 }
 
 fn parse_pat(ptokens: &[PToken]) -> Result<String, Error> {

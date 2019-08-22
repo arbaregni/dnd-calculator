@@ -6,7 +6,6 @@ use crate::type_info::{Type, FnType};
 use crate::env::Env;
 use crate::error::Error;
 use std::cmp::Ordering;
-use std::any::Any;
 
 #[derive(Clone, Debug)]
 pub enum Symbol {
