@@ -75,7 +75,7 @@ impl Symbol {
             Symbol::Text(ref s) => format!("{}", s),
             Symbol::Num(n) => format!("{}", n),
             Symbol::Distr(ref d) => d.try_to_num().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
-            Symbol::Fn{ref ptr, ref type_, ref exprs} => format!("<{} at {:?}>", type_, ptr),
+            Symbol::Fn{ref ptr, ref type_,  exprs: _} => format!("<{} at {:?}>", type_, ptr),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
             Symbol::Apply { ref target, ref args } => format!("({} >> {})", args.iter().map(Symbol::repr).collect::<Vec<String>>().join(" >> "), target.repr()),
             Symbol::Assigner { ref name, ref def_type, ref expr } => {

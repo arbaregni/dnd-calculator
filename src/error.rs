@@ -1,4 +1,3 @@
-use std::num::ParseIntError;
 macro_rules! create_err {
     ($reason:expr, $opt_span:expr) => {
         Error {

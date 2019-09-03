@@ -67,11 +67,11 @@ impl PToken {
         } else if let Some(mat) = captures.name("dice") {
             let dice_num: KeyType = captures.name("dice_num").map_or(Ok(1), |num_mat| {
                 println!("{}", num_mat.as_str());
-                num_mat.as_str().parse::<KeyType>().map_err(|err| fail_at!(to_span(num_mat, idx), "could not parse dice number specifier in literal"))
+                num_mat.as_str().parse::<KeyType>().map_err(|_| fail_at!(to_span(num_mat, idx), "could not parse dice number specifier in literal"))
             })?;
             let dice_size: KeyType = captures.name("dice_size").map_or(Err(fail_at!(to_span(mat, idx), "dice literal missing dice size specifier")), |size_mat| {
                 println!("{}", size_mat.as_str());
-                size_mat.as_str().parse::<KeyType>().map_err(|err| fail_at!(to_span(size_mat, idx), "could not parse dice size specifier in literal"))
+                size_mat.as_str().parse::<KeyType>().map_err(|_| fail_at!(to_span(size_mat, idx), "could not parse dice size specifier in literal"))
             })?;
             PToken {
                 kind: PTokenKind::Expr(Symbol::Apply { target: Box::new("make-dice".to_string().into()), args: vec![dice_num.into(), dice_size.into()] }),
