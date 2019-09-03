@@ -36,6 +36,11 @@ pub enum Symbol {
     ///
     /// ```
     Fn{ptr: Box<fn(Vec<Symbol>) -> Symbol>, type_: FnType, exprs: Vec<Symbol>},
+    /// # Fields
+    ///  target - the function to apply
+    ///  args - the args to curry into the function
+    ///
+    /// the target should be evaluated to be a Symbol::Fn
     Apply{target: Box<Symbol>, args: Vec<Symbol>},
     Assigner{name: String, def_type: Option<Type>, expr: Box<Symbol>},
 }
@@ -72,7 +77,7 @@ impl Symbol {
             Symbol::Distr(ref d) => d.try_to_num().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
             Symbol::Fn{ref ptr, ref type_, ref exprs} => format!("<{} at {:?}>", type_, ptr),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
-            Symbol::Apply { ref target, ref args } => format!("({} >> {})", args.iter().map(Symbol::repr).collect::<Vec<String>>().join(" "), target.repr()),
+            Symbol::Apply { ref target, ref args } => format!("({} >> {})", args.iter().map(Symbol::repr).collect::<Vec<String>>().join(" >> "), target.repr()),
             Symbol::Assigner { ref name, ref def_type, ref expr } => {
                 match def_type {
                     None => format!("{} = {}", name, expr.repr()),
@@ -109,12 +114,13 @@ impl Symbol {
                 println!("{}]", indent);
             }
             Symbol::Apply {ref target, ref args} => {
-                println!("{}Apply", indent);
+                println!("{}Apply Fn", indent);
+                target.walk(env, indent_level + 4);
+                println!("{} to ", indent);
                 for arg in args {
                     arg.walk(env, indent_level + 4);
                 }
-                println!("{} to ", indent);
-                target.walk(env, indent_level + 4);
+
             },
             Symbol::Assigner {ref name, ref def_type, ref expr} => {
                 println!("{}Assigner[{}: {:?}]", indent, name, def_type);
@@ -146,7 +152,7 @@ impl Symbol {
                     for (i, (arg, expected_type)) in args.iter().zip(fn_type.in_types.iter()).enumerate() {
                         let found_type = arg.type_check(env)?;
                         if !found_type.coercible_to(expected_type) {
-                            return Err(fail!("incorrect signature for function at position {}: expected type {}, found type {}", i, expected_type, found_type))
+                            return Err(fail!("incorrect signature for function `{}` at position {}: expected type {}, found type {}", target.repr(), i, expected_type, found_type))
                         }
                     }
                     if args.len() < fn_type.in_types.len() {

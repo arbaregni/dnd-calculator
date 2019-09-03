@@ -31,8 +31,8 @@ fn prompt_user(prompt: &str) -> io::Result<String> {
     Ok(buf.trim().to_string())
 }
 
-/// read, evaluate, and then print the users line
-pub fn read_eval_print(line: &str, env: &mut Env) -> Result<Symbol, Error> {
+/// Take a line of input and convert it into a symbol, performing type analysis along the way
+pub fn parse_analyze_evaluate(line: &str, env: &mut Env) -> Result<Symbol, Error> {
     println!("environment: {:?}", env);
     let ast: Symbol = parse::parse_line(line, env).concat_err(fail!("parser failed"))?;
     ast.walk(env, 0);
@@ -48,16 +48,16 @@ fn main() {
     env
         .import_arithmetic()
         .import_dice()
-        .bind_fn_var("I".to_string(), Box::new(|vec| vec[0].clone()),
-                                                 fn_type!(Type::Distr, -> Type::Distr)
+        .bind_fn_var("debug".to_string(), Box::new(|vec| {
+            println!("{:#?}", vec[0]).into()
+        }), fn_type!(Type::Any, -> Type::Any)
         )
-        .bind_fn_var("K".to_string(), Box::new(|vec| vec[0].clone()),
-                                                 fn_type!(Type::Distr, Type::Distr, -> Type::Distr)
-        );
+        ;
     loop {
         let line = prompt_user("/>  ").unwrap();
+        if line.trim() == "exit" { break; }
         println!("-------------------------");
-        let res = read_eval_print(&line, &mut env);
+        let res = parse_analyze_evaluate(&line, &mut env);
         println!("-------------------------");
         match res {
             Ok(symbol) => {

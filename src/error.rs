@@ -1,4 +1,16 @@
-// instantiate the Error
+use std::num::ParseIntError;
+macro_rules! create_err {
+    ($reason:expr, $opt_span:expr) => {
+        Error {
+            reason: $reason,
+            opt_span: $opt_span,
+            line: line!(),
+            column: column!(),
+            file: file!(),
+        }
+    }
+}
+/// instantiate the Error without span info, filling in meta information about where the error was created (i.e., line column file)
 macro_rules! fail {
     ($reason_template:expr $(, $arg:expr)* ) => (
         Error {
@@ -10,6 +22,7 @@ macro_rules! fail {
         }
     )
 }
+/// instantiate the Error with span info, filling in meta information about where the error was created (i.e., line column file)
 macro_rules! fail_at {
    ($span:expr, $reason_template:expr $(, $arg:expr)* ) => (
         Error {
