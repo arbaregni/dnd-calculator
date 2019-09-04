@@ -1,7 +1,8 @@
 use crate::symbols::Symbol;
-use crate::type_info::{Type, FnType};
+use crate::type_info::{Type};
 
 use std::collections::HashMap;
+use crate::closures::FnType;
 
 #[derive(Debug, Clone)]
 pub struct Env {

@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 
 use crate::distr::{KeyType, Distr};
-use crate::type_info::{Type, FnType};
+use crate::type_info::{Type};
 use crate::env::Env;
 use crate::error::Error;
 use std::cmp::Ordering;
+use crate::closures::FnType;
 
 #[derive(Clone, Debug)]
 pub enum Symbol {

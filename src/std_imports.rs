@@ -1,5 +1,6 @@
-use crate::type_info::{Type, FnType};
+use crate::type_info::{Type};
 use crate::error::Error;
+use crate::closures::FnType;
 
 use crate::env::Env;
 

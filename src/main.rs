@@ -1,13 +1,15 @@
 #[macro_use] extern crate lazy_static;
 
 #[macro_use] mod error;
-#[macro_use] mod type_info;
+#[macro_use] mod closures;
+mod type_info;
 mod ptokens;
-mod std_imports;
+mod distr;
 mod env;
+mod std_imports;
 mod parse;
 mod symbols;
-mod distr;
+
 
 #[cfg(test)]
 mod tests;
@@ -18,7 +20,7 @@ use std::io::Write;
 use symbols::Symbol;
 use crate::error::{Error, ConcatErr};
 use crate::env::Env;
-use crate::type_info::FnType;
+use crate::closures::FnType;
 
 fn prompt_user(prompt: &str) -> io::Result<String> {
     let stdin = io::stdin();

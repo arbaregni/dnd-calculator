@@ -3,7 +3,8 @@ use crate::symbols::Symbol;
 use crate::env::Env;
 use crate::error::Error;
 use crate::error::ConcatErr;
-use crate::type_info::{Type, FnType};
+use crate::type_info::{Type};
+use crate::closures::FnType;
 
 pub fn parse_line(src: &str, env: &Env) -> Result<Symbol, Error> {
     let mut iter = TokenCaptureStream::new(src);
