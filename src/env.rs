@@ -2,7 +2,8 @@ use crate::symbols::Symbol;
 use crate::type_info::{Type};
 
 use std::collections::HashMap;
-use crate::closures::FnType;
+use crate::closures::{FnType, FnVal};
+use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub struct Env {
@@ -18,9 +19,9 @@ impl Env {
         self.var_types.insert(name, type_);
         self
     }
-    pub fn bind_fn_var(&mut self, name: String, ptr: Box<fn(Vec<Symbol>) -> Symbol>, type_: FnType) -> &mut Env {
-        let value = Symbol::Fn {ptr, type_: type_.clone(), exprs: vec![]};
-        self.bind_var(name, value, type_.into())
+    pub fn bind_fn_var(&mut self, name: String, ptr: fn(Vec<Symbol>, &mut Env) -> Result<Symbol, Error>, type_: FnType) -> &mut Env {
+        let value = FnVal{ptr, type_: type_.clone(), exprs: vec![]};
+        self.bind_var(name, value.into(), type_.into())
     }
     pub fn lookup_var(&self, name: &str) -> Option<(&Symbol, &Type)> {
         self.var_types.get(name)

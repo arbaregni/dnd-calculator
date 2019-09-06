@@ -50,9 +50,9 @@ fn main() {
     env
         .import_arithmetic()
         .import_dice()
-        .bind_fn_var("debug".to_string(), Box::new(|vec| {
-            println!("{:#?}", vec[0]).into()
-        }), fn_type!(Type::Any, -> Type::Any)
+        .bind_fn_var("debug".to_string(), |vec, _| {
+            Ok(println!("{:#?}", vec[0]).into())
+        }, fn_type!(Type::Any, -> Type::Any)
         )
         ;
     loop {

@@ -4,8 +4,7 @@ use crate::distr::{KeyType, Distr};
 use crate::type_info::{Type};
 use crate::env::Env;
 use crate::error::Error;
-use std::cmp::Ordering;
-use crate::closures::FnType;
+use crate::closures::{FnVal};
 
 #[derive(Clone, Debug)]
 pub enum Symbol {
@@ -14,29 +13,7 @@ pub enum Symbol {
     Num(KeyType),
     Distr(Distr),
     Seq(Vec<Symbol>),
-    /// # Fields
-    /// * `ptr` - boxed pointer to the underlying function to evoke
-    /// * `type_` - FnType representing the input and output types of this function
-    /// * `exprs` - Vec of Symbols representing the already applied (captured) arguments
-    ///
-    /// # Invariant
-    /// the len of `type_.in_types` and the len of `exprs` should always equal the number of arguments that the underlying function pointer expects
-    ///
-    /// # Example
-    /// ```
-    /// let ptr = Box::new(|vec| vec[2]);
-    /// let type_ = fn_type!(Type::Num, Type::Distr, Type::Nil, -> Type::Num);
-    /// let fn_symbol = Symbol::Fn{ptr, type_, exprs: vec![]};
-    /// // at this point, the underlying pointer expects a vector of len 3
-    /// // we have not applied any inputs yet, so type_.input_types contains all the inputs
-    /// let apply_symbol = Symbol::Apply{target: fn_symbol, args: vec![Symbol::Num(1)]};
-    /// // -- snip --
-    /// // apply_symbol is evaluated
-    /// // -- snip --
-    /// // let expected_result = Symbol::Fn{ptr, type_: fn_type!(Type::Distr, Type::Nil), exprs: vec![Symbol::Num(1)]};
-    ///
-    /// ```
-    Fn{ptr: Box<fn(Vec<Symbol>) -> Symbol>, type_: FnType, exprs: Vec<Symbol>},
+    Fn(FnVal),
     /// # Fields
     ///  target - the function to apply
     ///  args - the args to curry into the function
@@ -76,7 +53,7 @@ impl Symbol {
             Symbol::Text(ref s) => format!("{}", s),
             Symbol::Num(n) => format!("{}", n),
             Symbol::Distr(ref d) => d.try_to_num().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
-            Symbol::Fn{ref ptr, ref type_,  exprs: _} => format!("<{} at {:?}>", type_, ptr),
+            Symbol::Fn(ref fn_val) => fn_val.repr(),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
             Symbol::Apply { ref target, ref args } => format!("({} >> {})", args.iter().map(Symbol::repr).collect::<Vec<String>>().join(" >> "), target.repr()),
             Symbol::Assigner { ref name, ref def_type, ref expr } => {
@@ -99,7 +76,7 @@ impl Symbol {
             },
             Symbol::Num(num) => println!("{}Num: {}", indent, num),
             Symbol::Distr(ref distr) => println!("{}Distr{}", indent, distr.stat_view()),
-            Symbol::Fn { ref exprs , .. } => {
+            Symbol::Fn(FnVal{ ref exprs , .. }) => {
                 println!("{}{}, captured: ", indent, self.repr());
                 println!("{}[", indent);
                 for expr in exprs {
@@ -134,7 +111,7 @@ impl Symbol {
             Symbol::Nil => Ok(Type::Nil),
             Symbol::Num(_) => Ok(Type::Num),
             Symbol::Distr(_) => Ok(Type::Distr),
-            Symbol::Fn { ref type_, .. } => Ok(type_.clone().into()),
+            Symbol::Fn(FnVal{ ref type_, .. }) => Ok(type_.clone().into()),
             Symbol::Seq(ref v) => {
                 for symbol in v {
                     let _ = symbol.type_check(env)?;
@@ -189,35 +166,15 @@ impl Symbol {
     }
     pub fn eval(&self, env: &mut Env) -> Result<Cow<Symbol>, Error> {
         Ok(match self {
-            Symbol::Nil | Symbol::Num(_) | Symbol::Distr(_) | Symbol::Fn{..}=> Cow::Borrowed(self),
+            Symbol::Nil | Symbol::Num(_) | Symbol::Distr(_) | Symbol::Fn(_) => Cow::Borrowed(self),
             Symbol::Seq(ref v) => {
                 // evaluate each item and put it back in a sequence
                 Cow::Owned(Symbol::Seq(v.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?))
             }
             Symbol::Apply {ref target, ref args} => Cow::Owned({
                 let eval_func = target.eval(env)?;
-                if let Symbol::Fn { ref ptr, ref type_, ref exprs} = eval_func.as_ref() {
-                    let mut new_exprs: Vec<Symbol> = vec![];
-                    new_exprs.extend_from_slice(exprs.as_slice()); // these were applied previously
-                    new_exprs.extend_from_slice(args.as_slice()); // we are applying those now
-                    println!("new_exprs: {:?}", new_exprs);
-                    match args.len().cmp(&type_.in_types.len()) {
-                        Ordering::Less => {
-                            // more to go: wrap up what we have in a Symbol::Fn
-                            Symbol::Fn { ptr: Box::clone(ptr), type_: type_.curry(args.len()), exprs: new_exprs}
-                        },
-                        Ordering::Equal => {
-                            // we are done: time to evaluate!
-                            let evaluated = new_exprs.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?;
-                            println!("evaluated: {:#?}", evaluated);
-                            ptr(evaluated)
-                        },
-                        Ordering::Greater => {
-                            // we went to far: let's complain >:(
-                            // todo make this error more helpful
-                            return Err(fail!("function {} was applied too many arguments (expected {} more, was given {})", target.repr(), type_.in_types.len(),  args.len()));
-                        },
-                    }
+                if let Symbol::Fn(fn_val) = eval_func.as_ref() {
+                    fn_val.apply(args, env)?
                 } else {
                     return Err(fail!("not a function: {}", eval_func.repr()))
                 }

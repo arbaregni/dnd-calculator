@@ -4,7 +4,8 @@ use crate::env::Env;
 use crate::error::Error;
 use crate::error::ConcatErr;
 use crate::type_info::{Type};
-use crate::closures::FnType;
+use crate::closures::{FnType, FnVal};
+use std::borrow::Cow;
 
 pub fn parse_line(src: &str, env: &Env) -> Result<Symbol, Error> {
     let mut iter = TokenCaptureStream::new(src);
@@ -151,16 +152,16 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
         if ptokens[idx].is_reserved("/") {
             if idx == 0 && idx != ptokens.len() {
                 // missing Left arg and but do have Right arg (which was supplied first)
-                return Ok(Symbol::Fn {
-                    ptr: Box::new(|mut args| {
+                return Ok(FnVal {
+                    ptr: |mut args, e| {
                         args.reverse();
                         Symbol::Apply {
                             target: Box::new("div".to_string().into()), args
-                        }
-                    }),
+                        }.eval(e).map(Cow::into_owned)
+                    },
                     type_: fn_type!(Type::Distr, -> Type::Distr),
                     exprs: vec![parse_right(idx)?]
-                });
+                }.into());
             }
             return Ok(Symbol::Apply {target: Box::new("div".to_string().into()), args: parse_either_side(ptokens, env, idx)? });
         }
