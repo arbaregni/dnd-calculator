@@ -139,6 +139,19 @@ fn parse_expr(ptokens: &[PToken], env: &Env) -> Result<Symbol, Error> {
             return Ok(Symbol::Apply {target: Box::new("add".to_string().into()), args: parse_either_side(ptokens, env, idx)? });
         }
         if ptokens[idx].is_reserved("-") {
+            if idx == 0 && idx != ptokens.len() {
+                // missing Left arg and but do have Right arg (which was supplied first)
+                return Ok(FnVal {
+                    ptr: |mut args, e| {
+                        args.reverse();
+                        Symbol::Apply {
+                            target: Box::new("sub".to_string().into()), args
+                        }.eval(e).map(Cow::into_owned)
+                    },
+                    type_: fn_type!(Type::Distr, -> Type::Distr),
+                    exprs: vec![parse_right(idx)?]
+                }.into());
+            }
             return Ok(Symbol::Apply {target: Box::new("sub".to_string().into()), args: parse_either_side(ptokens, env, idx)? });
         }
     }
