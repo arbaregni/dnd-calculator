@@ -1,0 +1,21 @@
+WHITESPACE = _{ " " }
+COMMENT = _{ "/*" ~ ANY* ~ "*/" }
+
+num = @{ ASCII_DIGIT+ }
+dice = @{ ASCII_DIGIT* ~ "d" ~ ASCII_DIGIT+ }
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | "_" | "-" )* }
+
+term = _{ dice | num | ident | seq }
+parens = _{ "(" ~ expr ~ ")" }
+
+op = _{ add | sub }
+  add = { (term | parens) ~ "+" ~ (term | parens) }
+  sub = { (term | parens) ~ "-" ~ (term | parens) }
+
+seq = { "[" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ "]" }
+
+apply = { (parens | term) ~ expr }
+
+expr = _{ parens | apply | op | term }
+
+line = _{ SOI ~ expr ~ EOI }
