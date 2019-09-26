@@ -69,6 +69,7 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
             target: Box::new("repeat".to_string().into()),
             args: parse_as_args(pair.into_inner())
         },
+        Rule::fn_lit => unreachable!("fn literal not supported"),
         Rule::seq => Symbol::Seq(pair.into_inner()
                                      .map(make_symbol)
                                      .collect()),

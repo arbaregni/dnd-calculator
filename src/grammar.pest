@@ -11,9 +11,10 @@ seq = { "[" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ "]" }
 
 parens = _{ "(" ~ expr ~ ")" }
 
+fn_lit = { "\\" ~ ident ~ "->" ~ expr }
 fn_call = { (ident | parens)  ~ expr+ }
 
-term = _{ parens | dice | num | seq | repeats | range_to | fn_call | ident }
+term = _{ fn_lit | parens | dice | num | seq | repeats | range_to | fn_call | ident }
 
 op = _{ add | sub | mul | div }
    add = { "+" }
