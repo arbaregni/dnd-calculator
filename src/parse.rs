@@ -65,7 +65,7 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
             target: Box::new("range-to".to_string().into()),
             args: parse_as_args(pair.into_inner())
         },
-        Rule::range_to => Symbol::Apply{
+        Rule::repeats => Symbol::Apply{
             target: Box::new("repeat".to_string().into()),
             args: parse_as_args(pair.into_inner())
         },
