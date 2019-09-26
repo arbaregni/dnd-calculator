@@ -1,21 +1,29 @@
 WHITESPACE = _{ " " }
-COMMENT = _{ "/*" ~ ANY* ~ "*/" }
+COMMENT = _{ "#" ~ (!"\r" ~ !"\n" ~ ANY)* }
 
 num = @{ ASCII_DIGIT+ }
 dice = @{ ASCII_DIGIT* ~ "d" ~ ASCII_DIGIT+ }
-ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | "_" | "-" )* }
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | "_" )* }
 
-term = _{ dice | num | ident | seq }
+seq_item = { expr }
+seq = { "[" ~ (seq_item ~ ("," ~ seq_item)* ~ ","?)? ~ "]" }
+
 parens = _{ "(" ~ expr ~ ")" }
 
-op = _{ add | sub }
-  add = { (term | parens) ~ "+" ~ (term | parens) }
-  sub = { (term | parens) ~ "-" ~ (term | parens) }
+fn_call = { (ident | parens)  ~ expr+ }
 
-seq = { "[" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ "]" }
+term = _{ parens | dice | num | seq | fn_call | ident }
 
-apply = { (parens | term) ~ expr }
+op = _{ add | sub | mul | div }
+   add = { "+" }
+   sub = { "-" }
+   mul = { "*" }
+   div = { "/" }
 
-expr = _{ parens | apply | op | term }
+expr = { term ~ (op ~ term)* }
 
-line = _{ SOI ~ expr ~ EOI }
+assignment = { ident ~ "=" ~ expr }
+assignment_with_type = { ident ~ ":" ~ ident ~ "=" ~ expr }
+
+eoi = _{ !ANY }
+line = _{ SOI ~ assignment_with_type | assignment | expr ~ eoi }

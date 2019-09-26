@@ -5,7 +5,6 @@ extern crate pest;
 #[macro_use] mod error;
 #[macro_use] mod closures;
 mod type_info;
-mod ptokens;
 mod distr;
 mod env;
 mod std_imports;
