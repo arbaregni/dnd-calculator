@@ -38,6 +38,11 @@ fn parse_expr(pairs: Pairs<Rule>) -> Symbol {
     })
 }
 
+fn parse_as_args(pairs: Pairs<Rule>) -> Vec<Symbol> {
+    pairs
+        .map(make_symbol)
+        .collect()
+}
 fn make_symbol(pair: Pair<Rule>) -> Symbol {
     match pair.as_rule() {
         Rule::num => pair.as_str().parse::<KeyType>().expect("Rule::num failed to parse").into(),
@@ -56,6 +61,14 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
         }
         Rule::ident => pair.as_str().to_string().into(),
         Rule::expr => parse_expr(pair.into_inner()),
+        Rule::range_to => Symbol::Apply{
+            target: Box::new("range-to".to_string().into()),
+            args: parse_as_args(pair.into_inner())
+        },
+        Rule::range_to => Symbol::Apply{
+            target: Box::new("repeat".to_string().into()),
+            args: parse_as_args(pair.into_inner())
+        },
         Rule::seq => Symbol::Seq(pair.into_inner()
                                      .map(make_symbol)
                                      .collect()),
@@ -67,8 +80,7 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
                 .as_str()
                 .to_string()
                 .into();
-            let args = pairs.map(make_symbol).collect();
-            Symbol::Apply { target: Box::new(target), args }
+            Symbol::Apply { target: Box::new(target), args: parse_as_args(pairs) }
         },
         Rule::assignment => {
             let mut pairs = pair.into_inner();

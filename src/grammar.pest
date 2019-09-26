@@ -5,13 +5,15 @@ num = @{ ASCII_DIGIT+ }
 dice = @{ ASCII_DIGIT* ~ "d" ~ ASCII_DIGIT+ }
 ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | "_" | "-")* }
 
+range_to = { "[" ~ expr ~ ".." ~ expr ~ "]"}
+repeats = { "[" ~ expr ~ ";" ~ expr ~ "]"}
 seq = { "[" ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ "]" }
 
 parens = _{ "(" ~ expr ~ ")" }
 
 fn_call = { (ident | parens)  ~ expr+ }
 
-term = _{ parens | dice | num | seq | fn_call | ident }
+term = _{ parens | dice | num | seq | repeats | range_to | fn_call | ident }
 
 op = _{ add | sub | mul | div }
    add = { "+" }
