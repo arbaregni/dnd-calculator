@@ -34,7 +34,6 @@ fn parse_expr(pairs: Pairs<Rule>) -> Symbol {
             Rule::div => "div",
             _ => unreachable!("encountered unreachable rule: {:?}", op.as_rule()),
         }.to_string().into();
-        println!("climbing: {:?}", op);
         Symbol::Apply { target: Box::new(target), args: vec![lhs, rhs] }
     })
 }
@@ -58,7 +57,7 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
         Rule::ident => pair.as_str().to_string().into(),
         Rule::expr => parse_expr(pair.into_inner()),
         Rule::seq => Symbol::Seq(pair.into_inner()
-                                     .map(|seq_item| parse_expr(seq_item.into_inner()))
+                                     .map(make_symbol)
                                      .collect()),
         Rule::fn_call => {
             let mut pairs = pair.into_inner();
@@ -87,7 +86,7 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
                 expr: Box::new(make_symbol(pairs.next().expect("Rule::assignment missing expr"))),
             }
         }
-                Rule::add | Rule::sub | Rule::mul  | Rule::div | Rule::seq_item
+                Rule::add | Rule::sub | Rule::mul  | Rule::div
            | Rule::parens | Rule::term | Rule::op | Rule::eoi | Rule::line
            | Rule::WHITESPACE | Rule::COMMENT => unreachable!("reached unreachable rule: {:?}", pair.as_rule()),
     }
