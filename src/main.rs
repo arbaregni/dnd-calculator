@@ -1,9 +1,10 @@
 #[macro_use] extern crate lazy_static;
+extern crate pest;
+#[macro_use] extern crate pest_derive;
 
 #[macro_use] mod error;
 #[macro_use] mod closures;
 mod type_info;
-mod ptokens;
 mod distr;
 mod env;
 mod std_imports;

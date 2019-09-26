@@ -20,7 +20,7 @@ pub enum Symbol {
     ///
     /// the target should be evaluated to be a Symbol::Fn
     Apply{target: Box<Symbol>, args: Vec<Symbol>},
-    Assigner{name: String, def_type: Option<Type>, expr: Box<Symbol>},
+    Assigner{name: String, def_type: Option<String>, expr: Box<Symbol>},
 }
 
 impl Symbol {
@@ -156,7 +156,7 @@ impl Symbol {
                 //TODO typecheck with arguments ??
                 let concrete_type = expr.type_check(env)?;
                 if let Some(_type) = def_type {
-                    if !concrete_type.coercible_to(_type) {
+                    if !concrete_type.coercible_to(&Type::try_from(_type).ok_or(fail!("invalid type: {}", _type))? ) {
                         return Err(fail!("annotated type {:?} does not match concrete type {:?}", _type, concrete_type));
                     }
                 }
