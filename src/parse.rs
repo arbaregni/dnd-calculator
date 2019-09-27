@@ -38,7 +38,7 @@ fn parse_expr(pairs: Pairs<Rule>) -> Symbol {
             Rule::le => "less-than-or-equal",
             Rule::gt => "greater-than",
             Rule::ge => "greater-than-or-equal",
-            Rule::eq => "equals",
+            Rule::eq => "equal",
             Rule::ne => "not-equal",
             Rule::add => "add",
             Rule::sub => "sub",

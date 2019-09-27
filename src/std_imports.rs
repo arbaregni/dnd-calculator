@@ -123,7 +123,7 @@ impl Env {
                 )
             }, fn_type!(Type::Distr, Type::Distr, -> Type::Prob))
             // EQUALS
-            .bind_fn_var("equals".to_string(), |args, _| {
+            .bind_fn_var("equal".to_string(), |args, _| {
                 args[0].try_to_distr().and_then(|left|
                     args[1].try_to_distr().and_then(|right|
                         Ok(left.as_ref().combine_predicate(right.as_ref(), |x, y| x == y).into())
@@ -131,7 +131,7 @@ impl Env {
                 )
             }, fn_type!(Type::Distr, Type::Distr, -> Type::Prob))
             // NOT EQUALS
-            .bind_fn_var("not-equals".to_string(), |args, _| {
+            .bind_fn_var("not-equal".to_string(), |args, _| {
                 args[0].try_to_distr().and_then(|left|
                     args[1].try_to_distr().and_then(|right|
                         Ok(left.as_ref().combine_predicate(right.as_ref(), |x, y| x != y).into())
