@@ -62,14 +62,16 @@ fn prompt_user(prompt: &str) -> io::Result<String> {
 
 /// Take a line of input and convert it into a symbol, performing type analysis along the way
 pub fn parse_analyze_evaluate(line: &str, env: &mut Env, debug: bool) -> Result<Symbol, Error> {
+    if debug { println!("----------------------------"); }
     if debug { env.print(); }
-    let ast: Symbol = parse::parse_line(line, env).concat_err(fail!("parser failed"))?;
+    let ast: Symbol = parse::parse_line(line, env)?;
     if debug { ast.walk(env, 0); }
     let type_ = ast.type_check(&env).concat_err(fail!("type checker failed"))?;
     if debug {
         println!("{}", ast.repr());
         println!("=>{}", type_);
     }
+    if debug { println!("----------------------------"); }
     Ok(ast.eval(env).concat_err(fail!("evaluator failed"))?.into_owned())
 }
 fn main() {
@@ -88,9 +90,8 @@ fn main() {
     loop {
         let line = prompt_user("/>  ").unwrap();
         if line.trim() == "exit" { break; }
-        if flags.debug { println!("-------------------------"); }
+        if line.trim().len() == 0 { continue; }
         let res = parse_analyze_evaluate(&line, &mut env, flags.debug);
-        if flags.debug { println!("------------------"); }
         match res {
             Ok(symbol) => {
                 if flags.debug { println!("   {:?}", symbol); }
