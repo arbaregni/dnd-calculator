@@ -23,6 +23,30 @@ use crate::error::{Error, ConcatErr};
 use crate::env::Env;
 use crate::closures::FnType;
 
+struct Flags {
+    pub filename: Option<String>,
+    pub debug: bool,
+}
+impl Flags {
+    pub fn get() -> Flags {
+        let mut flags = Flags {
+            filename: None,
+            debug: false,
+        };
+        let mut args = std::env::args();
+        if let Some(name) = args.next() {
+            flags.filename = Some(name);
+        }
+        for arg in args {
+            match arg.as_str() {
+                "--debug" | "-d" => flags.debug = true,
+                _ => {}
+            }
+        }
+        flags
+    }
+}
+
 fn prompt_user(prompt: &str) -> io::Result<String> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -35,16 +59,19 @@ fn prompt_user(prompt: &str) -> io::Result<String> {
 }
 
 /// Take a line of input and convert it into a symbol, performing type analysis along the way
-pub fn parse_analyze_evaluate(line: &str, env: &mut Env) -> Result<Symbol, Error> {
-    println!("environment: {:?}", env);
+pub fn parse_analyze_evaluate(line: &str, env: &mut Env, debug: bool) -> Result<Symbol, Error> {
+    if debug { println!("environment: {:?}", env); }
     let ast: Symbol = parse::parse_line(line, env).concat_err(fail!("parser failed"))?;
-    ast.walk(env, 0);
+    if debug { ast.walk(env, 0); }
     let type_ = ast.type_check(&env).concat_err(fail!("type checker failed"))?;
-    println!("{}", ast.repr());
-    println!("=>{}", type_);
+    if debug {
+        println!("{}", ast.repr());
+        println!("=>{}", type_);
+    }
     Ok(ast.eval(env).concat_err(fail!("evaluator failed"))?.into_owned())
 }
 fn main() {
+    let flags = Flags::get();
     println!("opening dnd calculator session");
     use type_info::Type;
     let mut env = Env::new();
@@ -54,18 +81,18 @@ fn main() {
         .import_comparisons()
         .bind_fn_var("debug".to_string(), |vec, _| {
             Ok(println!("{:#?}", vec[0]).into())
-        }, fn_type!(Type::Any, -> Type::Any)
-        )
+        }, fn_type!(Type::Any, -> Type::Any))
         ;
     loop {
         let line = prompt_user("/>  ").unwrap();
         if line.trim() == "exit" { break; }
-        println!("-------------------------");
-        let res = parse_analyze_evaluate(&line, &mut env);
-        println!("-------------------------");
+        if flags.debug { println!("-------------------------"); }
+        let res = parse_analyze_evaluate(&line, &mut env, flags.debug);
+        if flags.debug { println!("------------------"); }
         match res {
             Ok(symbol) => {
-                println!(" {:?}\n{}", symbol, symbol.repr());
+                if flags.debug { println!("   {:?}", symbol); }
+                println!("{}", symbol.repr());
             }
             Err(err) => {
                 if let Some(span) = err.opt_span {

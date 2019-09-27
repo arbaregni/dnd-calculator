@@ -79,7 +79,6 @@ impl FnVal {
         let mut new_exprs: Vec<Symbol> = vec![];
         new_exprs.extend_from_slice(self.exprs.as_slice()); // these were applied previously
         new_exprs.extend_from_slice(args); // we are applying those now
-        println!("new_exprs: {:?}", new_exprs);
         match args.len().cmp(&self.type_.in_types.len()) {
             Ordering::Less => {
                 // more to go: wrap up what we have in a Symbol::Fn
@@ -88,7 +87,6 @@ impl FnVal {
             Ordering::Equal => {
                 // we are done: time to evaluate!
                 let evaluated = new_exprs.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?;
-                println!("evaluated: {:#?}", evaluated);
                 (self.ptr)(evaluated, env)
             },
             Ordering::Greater => {
