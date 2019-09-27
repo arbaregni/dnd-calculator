@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::distr::{KeyType, Distr};
+use crate::distr::{KeyType, Distr, ProbType};
 use crate::type_info::{Type};
 use crate::env::Env;
 use crate::error::Error;
@@ -11,6 +11,7 @@ pub enum Symbol {
     Nil,
     Text(String),
     Num(KeyType),
+    Prob(ProbType),
     Distr(Distr),
     Seq(Vec<Symbol>),
     Fn(FnVal),
@@ -52,6 +53,7 @@ impl Symbol {
             Symbol::Nil => format!("Nil"),
             Symbol::Text(ref s) => format!("{}", s),
             Symbol::Num(n) => format!("{}", n),
+            Symbol::Prob(p) => format!("{:3}", p),
             Symbol::Distr(ref d) => d.try_to_num().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
             Symbol::Fn(ref fn_val) => fn_val.repr(),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
@@ -75,6 +77,7 @@ impl Symbol {
                 }
             },
             Symbol::Num(num) => println!("{}Num: {}", indent, num),
+            Symbol::Prob(prob) => println!("{}Prob: {}", indent, prob),
             Symbol::Distr(ref distr) => println!("{}Distr{}", indent, distr.stat_view()),
             Symbol::Fn(FnVal{ ref exprs , .. }) => {
                 println!("{}{}, captured: ", indent, self.repr());
@@ -109,6 +112,7 @@ impl Symbol {
     pub fn type_check(&self, env: &Env) -> Result<Type, Error> {
         match *self {
             Symbol::Nil => Ok(Type::Nil),
+            Symbol::Prob(_) => Ok(Type::Prob),
             Symbol::Num(_) => Ok(Type::Num),
             Symbol::Distr(_) => Ok(Type::Distr),
             Symbol::Fn(FnVal{ ref type_, .. }) => Ok(type_.clone().into()),
@@ -166,7 +170,7 @@ impl Symbol {
     }
     pub fn eval(&self, env: &mut Env) -> Result<Cow<Symbol>, Error> {
         Ok(match self {
-            Symbol::Nil | Symbol::Num(_) | Symbol::Distr(_) | Symbol::Fn(_) => Cow::Borrowed(self),
+            Symbol::Nil | Symbol::Num(_) | Symbol::Prob(_) | Symbol::Distr(_) | Symbol::Fn(_) => Cow::Borrowed(self),
             Symbol::Seq(ref v) => {
                 // evaluate each item and put it back in a sequence
                 Cow::Owned(Symbol::Seq(v.iter().map(|expr| expr.eval(env).map(Cow::into_owned)).collect::<Result<Vec<Symbol>, Error>>()?))
@@ -199,6 +203,9 @@ impl std::convert::From<KeyType> for Symbol {
     fn from(n: KeyType) -> Symbol {
         Symbol::Num(n)
     }
+}
+impl std::convert::From<ProbType> for Symbol {
+    fn from(p: ProbType) -> Symbol { Symbol::Prob(p) }
 }
 impl std::convert::From<Distr> for Symbol {
     fn from(distr: Distr) -> Symbol {

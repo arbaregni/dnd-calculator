@@ -10,6 +10,7 @@ pub enum Type {
     Nil,
     Any,
     Num,
+    Prob,
     Distr,
     Seq(Box<Type>),
     Fn(FnType),
@@ -21,6 +22,7 @@ impl std::fmt::Display for Type {
             Type::Nil => write!(f, "Nil"),
             Type::Any => write!(f, "Any"),
             Type::Num => write!(f, "Num"),
+            Type::Prob => write!(f, "Prob"),
             Type::Distr => write!(f, "Distr"),
             Type::Seq(ref inner_type) => write!(f, "Seq<{}>", inner_type),
             Type::Fn(ref fn_type) => write!(f, "{}", fn_type),
@@ -32,6 +34,7 @@ impl Type {
         match s {
             "Nil" => Some(Type::Nil),
             "Num" => Some(Type::Num),
+            "Prob" => Some(Type::Prob),
             "Distr" => Some(Type::Distr),
             "Any" => Some(Type::Any),
             _ => None

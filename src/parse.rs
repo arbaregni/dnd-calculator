@@ -3,7 +3,7 @@ use pest::iterators::{Pair, Pairs};
 use crate::env::Env;
 use crate::symbols::Symbol;
 use crate::error::Error;
-use crate::distr::{KeyType, Distr};
+use crate::distr::{KeyType, Distr, ProbType};
 use pest::prec_climber::{PrecClimber, Assoc, Operator};
 
 
@@ -32,7 +32,7 @@ fn parse_expr(pairs: Pairs<Rule>) -> Symbol {
             Rule::sub => "sub",
             Rule::mul => "mul",
             Rule::div => "div",
-            _ => unreachable!("encountered unreachable rule: {:?}", op.as_rule()),
+            _ => unreachable!("encountered rule: {:?} while climbing", op.as_rule()),
         }.to_string().into();
         Symbol::Apply { target: Box::new(target), args: vec![lhs, rhs] }
     })
@@ -59,6 +59,13 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
                 Distr::stacked_unifs(items[0], items[1])
             }.into()
         }
+        Rule::decimal_prob => pair.as_str().parse::<ProbType>().expect("Rule::decimal_prob failed to parse").into(),
+        Rule::percent_prob =>
+            (pair
+             .as_str()[0..pair.as_str().len()-1]
+             .parse::<ProbType>()
+             .expect("Rule::percent_prob failed to parse") / 100.0)
+            .into(),
         Rule::ident => pair.as_str().to_string().into(),
         Rule::expr => parse_expr(pair.into_inner()),
         Rule::range_to => Symbol::Apply{
@@ -99,7 +106,7 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
                 expr: Box::new(make_symbol(pairs.next().expect("Rule::assignment missing expr"))),
             }
         }
-                Rule::add | Rule::sub | Rule::mul  | Rule::div
+                Rule::add | Rule::sub | Rule::mul  | Rule::div | Rule::pre_zero | Rule::pre_two_one | Rule::pre_three
            | Rule::parens | Rule::term | Rule::op | Rule::eoi | Rule::line
            | Rule::WHITESPACE | Rule::COMMENT => unreachable!("reached unreachable rule: {:?}", pair.as_rule()),
     }
