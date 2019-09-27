@@ -53,7 +53,7 @@ impl Symbol {
             Symbol::Nil => format!("Nil"),
             Symbol::Text(ref s) => format!("{}", s),
             Symbol::Num(n) => format!("{}", n),
-            Symbol::Prob(p) => format!("{:3}", p),
+            Symbol::Prob(p) => format!("{:.2}%", 100.0 * p),
             Symbol::Distr(ref d) => d.try_to_num().map(|n| format!("{}", n)).unwrap_or(d.stat_view()),
             Symbol::Fn(ref fn_val) => fn_val.repr(),
             Symbol::Seq(ref v) => format!("[{}]", v.iter().map(Symbol::repr).collect::<Vec<String>>().join(", ")),
