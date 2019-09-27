@@ -51,6 +51,7 @@ fn main() {
     env
         .import_arithmetic()
         .import_dice()
+        .import_comparisons()
         .bind_fn_var("debug".to_string(), |vec, _| {
             Ok(println!("{:#?}", vec[0]).into())
         }, fn_type!(Type::Any, -> Type::Any)

@@ -71,6 +71,20 @@ impl Distr {
         }
         Ok(distr)
     }
+    pub fn combine_predicate<F>(&self, other: &Distr, op: F) -> ProbType
+        where F: Fn(KeyType, KeyType) -> bool {
+        let mut count = 0;
+        for ref x in self.iter() {
+            for ref y in other.iter() {
+                if (op)(**x, **y) {
+                    count += 1;
+                }
+            }
+        }
+        let total = self.len() * other.len();
+        count as ProbType / total as ProbType
+    }
+
     pub fn stat_view(&self) -> String {
         format!("<Mean: {:.3}, Stdev: {:.3}>", self.mean(), self.stdev())
     }
