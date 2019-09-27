@@ -22,11 +22,17 @@ fn_call = { (ident | parens)  ~ expr+ }
 
 term = _{ fn_lit | parens | percent_prob | decimal_prob | dice | num | seq | repeats | range_to | fn_call | ident }
 
-op = _{ add | sub | mul | div }
+op = _{ add | sub | mul | div | le | lt | ge | gt | eq | ne }
    add = { "+" }
    sub = { "-" }
    mul = { "*" }
    div = { "/" }
+   le = { "<=" }
+   lt = { "<" }
+   ge = { ">=" }
+   gt = { ">" }
+   eq = { "==" }
+   ne = { "!=" }
 
 expr = { term ~ (op ~ term)* ~ op? }
 

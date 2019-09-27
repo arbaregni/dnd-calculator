@@ -22,17 +22,26 @@ pub fn parse_line(src: &str, _env: &Env) -> Result<Symbol, Error> {
 fn parse_expr(pairs: Pairs<Rule>) -> Symbol {
     lazy_static! {
         static ref CLIMBER: PrecClimber<Rule> = PrecClimber::new(vec![
+            Operator::new(Rule::lt, Assoc::Left) | Operator::new(Rule::le, Assoc::Left)
+              | Operator::new(Rule::gt, Assoc::Left) | Operator::new(Rule::ge, Assoc::Left)
+              | Operator::new(Rule::eq, Assoc::Left) | Operator::new(Rule::ne, Assoc::Left),
             Operator::new(Rule::add, Assoc::Left) | Operator::new(Rule::sub, Assoc::Left),
             Operator::new(Rule::mul, Assoc::Left) | Operator::new(Rule::div, Assoc::Left),
         ]);
     }
     CLIMBER.climb(pairs, make_symbol, |lhs, op, rhs| {
         let target = match op.as_rule() {
+            Rule::lt => "less-than",
+            Rule::le => "less-than-or-equal",
+            Rule::gt => "greater-than",
+            Rule::ge => "greater-than-or-equal",
+            Rule::eq => "equals",
+            Rule::ne => "not-equal",
             Rule::add => "add",
             Rule::sub => "sub",
             Rule::mul => "mul",
             Rule::div => "div",
-            _ => unreachable!("encountered rule: {:?} while climbing", op.as_rule()),
+            _ => unreachable!("encountered rule `{:?}` while climbing", op.as_rule()),
         }.to_string().into();
         Symbol::Apply { target: Box::new(target), args: vec![lhs, rhs] }
     })
@@ -106,7 +115,9 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
                 expr: Box::new(make_symbol(pairs.next().expect("Rule::assignment missing expr"))),
             }
         }
-                Rule::add | Rule::sub | Rule::mul  | Rule::div | Rule::pre_zero | Rule::pre_two_one | Rule::pre_three
+             Rule::add | Rule::sub | Rule::mul  | Rule::div
+           | Rule::lt | Rule::le | Rule::gt | Rule::ge | Rule::eq | Rule::ne
+           | Rule::pre_zero | Rule::pre_two_one | Rule::pre_three
            | Rule::parens | Rule::term | Rule::op | Rule::eoi | Rule::line
            | Rule::WHITESPACE | Rule::COMMENT => unreachable!("reached unreachable rule: {:?}", pair.as_rule()),
     }
