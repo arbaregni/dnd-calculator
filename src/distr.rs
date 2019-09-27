@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use crate::error::Error;
+use crate::util::Table;
 
 pub type KeyType = i32;
 pub type ProbType = f64;
@@ -108,11 +109,11 @@ impl Distr {
         s
     }
     pub fn table_view(&self) -> String {
-        let mut s = format!("  x | P(x)\n ---╋-----\n");
+        let mut table = Table::new(vec!["x".to_string(), "Probability".to_string()]);
         for x in self.iter().cloned() {
-            s.push_str(&format!(" {:2} | {:.5}\n", x, self.prob(x)));
+            table.add_row(vec![x.to_string(), format!("{:.4}", self.prob(x))]);
         }
-        s
+        format!("{}", table)
     }
 
     pub fn try_to_num(&self) -> Result<KeyType, Error> {

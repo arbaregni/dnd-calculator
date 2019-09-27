@@ -4,6 +4,7 @@ use crate::type_info::{Type};
 use std::collections::HashMap;
 use crate::closures::{FnType, FnVal};
 use crate::error::Error;
+use crate::util::Table;
 
 #[derive(Debug, Clone)]
 pub struct Env {
@@ -13,6 +14,14 @@ pub struct Env {
 impl Env {
     pub fn new() -> Env {
         Env { var_symbols: HashMap::new(), var_types: HashMap::new() }
+    }
+    pub fn print(&self) {
+        let mut table = Table::new(vec!["Name".to_string(), "Type".to_string(), "Value".to_string()]);
+        for (name, value) in self.var_symbols.iter() {
+            let type_ = self.var_types.get(name).map_or(String::new(), |t| format!("{}", t));
+            table.add_row(vec![name.to_string(), type_, value.repr()]);
+        }
+        println!("{}", table);
     }
     pub fn bind_var(&mut self, name: String, value: Symbol, type_: Type) -> &mut Env {
         self.var_symbols.insert(name.clone(), value);
