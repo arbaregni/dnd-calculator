@@ -1,9 +1,11 @@
+extern crate pad;
 #[macro_use] extern crate lazy_static;
 extern crate pest;
 #[macro_use] extern crate pest_derive;
 
 #[macro_use] mod error;
 #[macro_use] mod closures;
+mod util;
 mod type_info;
 mod distr;
 mod env;
@@ -60,7 +62,7 @@ fn prompt_user(prompt: &str) -> io::Result<String> {
 
 /// Take a line of input and convert it into a symbol, performing type analysis along the way
 pub fn parse_analyze_evaluate(line: &str, env: &mut Env, debug: bool) -> Result<Symbol, Error> {
-    if debug { println!("environment: {:?}", env); }
+    if debug { env.print(); }
     let ast: Symbol = parse::parse_line(line, env).concat_err(fail!("parser failed"))?;
     if debug { ast.walk(env, 0); }
     let type_ = ast.type_check(&env).concat_err(fail!("type checker failed"))?;
