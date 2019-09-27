@@ -22,6 +22,7 @@ pub fn parse_line(src: &str, _env: &Env) -> Result<Symbol, Error> {
 fn parse_expr(pairs: Pairs<Rule>) -> Symbol {
     lazy_static! {
         static ref CLIMBER: PrecClimber<Rule> = PrecClimber::new(vec![
+            Operator::new(Rule::and, Assoc::Left) | Operator::new(Rule::or, Assoc::Left),
             Operator::new(Rule::lt, Assoc::Left) | Operator::new(Rule::le, Assoc::Left)
               | Operator::new(Rule::gt, Assoc::Left) | Operator::new(Rule::ge, Assoc::Left)
               | Operator::new(Rule::eq, Assoc::Left) | Operator::new(Rule::ne, Assoc::Left),
@@ -31,6 +32,8 @@ fn parse_expr(pairs: Pairs<Rule>) -> Symbol {
     }
     CLIMBER.climb(pairs, make_symbol, |lhs, op, rhs| {
         let target = match op.as_rule() {
+            Rule::and => "and",
+            Rule::or => "or",
             Rule::lt => "less-than",
             Rule::le => "less-than-or-equal",
             Rule::gt => "greater-than",
@@ -117,6 +120,7 @@ fn make_symbol(pair: Pair<Rule>) -> Symbol {
         }
              Rule::add | Rule::sub | Rule::mul  | Rule::div
            | Rule::lt | Rule::le | Rule::gt | Rule::ge | Rule::eq | Rule::ne
+           | Rule::and | Rule::or | Rule::reserved
            | Rule::pre_zero | Rule::pre_two_one | Rule::pre_three
            | Rule::parens | Rule::term | Rule::op | Rule::eoi | Rule::line
            | Rule::WHITESPACE | Rule::COMMENT => unreachable!("reached unreachable rule: {:?}", pair.as_rule()),

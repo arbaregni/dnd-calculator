@@ -9,7 +9,9 @@ percent_prob = @{  (pre_three | pre_two_one | pre_zero) ~ "%"}
 
 num = @{ ASCII_DIGIT+ }
 dice = @{ ASCII_DIGIT* ~ "d" ~ ASCII_DIGIT+ }
-ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | "_" | "-")* }
+
+reserved = _{ "and" | "or" }
+ident = @{ !reserved ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | "_" | "-")* }
 
 range_to = { "[" ~ expr ~ ".." ~ expr ~ "]"}
 repeats = { "[" ~ expr ~ ";" ~ expr ~ "]"}
@@ -22,7 +24,9 @@ fn_call = { (ident | parens)  ~ expr+ }
 
 term = _{ fn_lit | parens | percent_prob | decimal_prob | dice | num | seq | repeats | range_to | fn_call | ident }
 
-op = _{ add | sub | mul | div | le | lt | ge | gt | eq | ne }
+op = _{ and | or | add | sub | mul | div | le | lt | ge | gt | eq | ne }
+   and = { "and" }
+   or = { "or" }
    add = { "+" }
    sub = { "-" }
    mul = { "*" }

@@ -70,14 +70,26 @@ impl Env {
     }
     pub fn import_comparisons(&mut self) -> &mut Self {
         self
-            // GREATER THAN OR EQUAL TO
-            .bind_fn_var("greater-than-or-equal".to_string(), |args, _| {
-                args[0].try_to_distr().and_then(|left|
-                    args[1].try_to_distr().and_then(|right|
-                        Ok(left.as_ref().combine_predicate(right.as_ref(), |x, y| x >= y).into())
+            // NOT
+            .bind_fn_var("not".to_string(), |args, _| {
+                args[0].try_to_prob().and_then(|prob| Ok((1.0 - prob).into()))
+            }, fn_type!(Type::Prob, -> Type::Prob))
+            // AND
+            .bind_fn_var("and".to_string(), |args, _| {
+                args[0].try_to_prob().and_then(|left|
+                    args[1].try_to_prob().and_then(|right|
+                        Ok((left * right).into())
                     )
                 )
-            }, fn_type!(Type::Distr, Type::Distr, -> Type::Prob))
+            }, fn_type!(Type::Prob, Type::Prob, -> Type::Prob))
+            // GREATER THAN
+            .bind_fn_var("or".to_string(), |args, _| {
+                args[0].try_to_prob().and_then(|left|
+                    args[1].try_to_prob().and_then(|right|
+                        Ok((left + right - left * right).into())
+                    )
+                )
+            }, fn_type!(Type::Prob, Type::Prob, -> Type::Prob))
             // GREATER THAN
             .bind_fn_var("greater-than".to_string(), |args, _| {
                 args[0].try_to_distr().and_then(|left|
@@ -86,11 +98,19 @@ impl Env {
                     )
                 )
             }, fn_type!(Type::Distr, Type::Distr, -> Type::Prob))
+            // GREATER THAN OR EQUAL
+            .bind_fn_var("greater-than-or-equal".to_string(), |args, _| {
+                args[0].try_to_distr().and_then(|left|
+                    args[1].try_to_distr().and_then(|right|
+                        Ok(left.as_ref().combine_predicate(right.as_ref(), |x, y| x >= y).into())
+                    )
+                )
+            }, fn_type!(Type::Distr, Type::Distr, -> Type::Prob))
             // LESS THAN OR EQUAL
             .bind_fn_var("less-than-or-equal".to_string(), |args, _| {
                 args[0].try_to_distr().and_then(|left|
                     args[1].try_to_distr().and_then(|right|
-                        Ok(left.as_ref().combine_predicate(right.as_ref(), |x, y| x >= y).into())
+                        Ok(left.as_ref().combine_predicate(right.as_ref(), |x, y| x <= y).into())
                     )
                 )
             }, fn_type!(Type::Distr, Type::Distr, -> Type::Prob))
@@ -114,7 +134,7 @@ impl Env {
             .bind_fn_var("not-equals".to_string(), |args, _| {
                 args[0].try_to_distr().and_then(|left|
                     args[1].try_to_distr().and_then(|right|
-                        Ok(left.as_ref().combine_predicate(right.as_ref(), |x, y| x == y).into())
+                        Ok(left.as_ref().combine_predicate(right.as_ref(), |x, y| x != y).into())
                     )
                 )
             }, fn_type!(Type::Distr, Type::Distr, -> Type::Prob))

@@ -42,6 +42,12 @@ impl Symbol {
             _ => Err(fail!("{} is not a number", self.repr())),
         }
     }
+    pub fn try_to_prob(&self) -> Result<ProbType, Error> {
+        match *self {
+            Symbol::Prob(prob) => Ok(prob),
+            _ => Err(fail!("{} is not a probability", self.repr())),
+        }
+    }
     pub fn try_to_str(&self) -> Result<&str, Error> {
         match *self {
             Symbol::Text(ref s) => Ok(s),
